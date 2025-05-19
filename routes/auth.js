@@ -4,6 +4,7 @@ import db from '../config/database.js';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import crypto from 'crypto';
+import fetch from 'node-fetch';
 
 const router = express.Router();
 
@@ -24,19 +25,79 @@ function generateRefreshToken() {
 // Registration endpoint
 router.post(['/register', '/api/auth/register'], async (req, res) => {
   console.log('Register request received:', req.body);
-  const { username, email, password } = req.body;
+  const { username, email, password, phone, amount } = req.body;
 
-  if (!email || !password) {
-    console.log('Registration failed: Missing email or password');
-    return res.status(400).json({ error: 'Email and password are required' });
+  if (!email || !password || !phone || !amount) {
+    console.log('Registration failed: Missing required fields');
+    return res.status(400).json({ error: 'Email, password, phone, and amount are required' });
+  }
+
+  // Check for duplicate email or username
+  try {
+    const userByEmail = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
+    if (userByEmail) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+    if (username) {
+      const userByUsername = await db.oneOrNone('SELECT * FROM users WHERE username = $1', [username]);
+      if (userByUsername) {
+        return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
+      }
+    }
+    // Also check pending_registrations for duplicates
+    const pendingByEmail = await db.oneOrNone('SELECT * FROM pending_registrations WHERE email = $1', [email]);
+    if (pendingByEmail) {
+      return res.status(400).json({ error: 'A registration is already pending for this email. Complete payment or wait.' });
+    }
+    if (username) {
+      const pendingByUsername = await db.oneOrNone('SELECT * FROM pending_registrations WHERE username = $1', [username]);
+      if (pendingByUsername) {
+        return res.status(400).json({ error: 'A registration is already pending for this username. Complete payment or wait.' });
+      }
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    // Generate unique tx_ref
+    const tx_ref = 'TX' + Date.now() + Math.floor(Math.random() * 1000000);
+    // Store registration info in pending_registrations
+    await db.none(
+      'INSERT INTO pending_registrations (tx_ref, username, email, password_hash, phone, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+      [tx_ref, username, email, hashedPassword, phone, amount]
+    );
+    // Respond with tx_ref and PayChangu public key
+    res.json({
+      tx_ref,
+      public_key: process.env.PAYCHANGU_PUBLIC_KEY,
+      amount,
+      email,
+      phone,
+      message: 'Proceed to payment with this tx_ref.'
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      if (error.constraint === 'pending_registrations_tx_ref_key') {
+        return res.status(400).json({ error: 'Duplicate transaction reference. Please try again.' });
+      }
+    }
+    res.status(500).json({ error: 'Registration failed. Please try again later.' });
   }
 
   try {
-    // Check if user already exists
-    const user = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
-    if (user) {
+    // Check if user already exists (by email)
+    const userByEmail = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
+    if (userByEmail) {
       console.log('Registration failed: Email already exists:', email);
       return res.status(400).json({ error: 'Email already registered' });
+    }
+    
+    // Check if username is already taken
+    if (username) {
+      const userByUsername = await db.oneOrNone('SELECT * FROM users WHERE username = $1', [username]);
+      if (userByUsername) {
+        console.log('Registration failed: Username already exists:', username);
+        return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
+      }
     }
 
     // Hash password and create user
@@ -76,7 +137,18 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     });
   } catch (error) {
     console.error('Database error during registration:', error);
-    res.status(500).json({ error: 'Database error', details: error.message });
+    
+    // Handle specific database errors with user-friendly messages
+    if (error.code === '23505') { // Unique constraint violation
+      if (error.constraint === 'users_username_key') {
+        return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
+      } else if (error.constraint === 'users_email_key') {
+        return res.status(400).json({ error: 'Email already registered' });
+      }
+    }
+    
+    // Generic error for other cases
+    res.status(500).json({ error: 'Registration failed. Please try again later.' });
   }
 });
 

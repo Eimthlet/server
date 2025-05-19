@@ -9,6 +9,7 @@ import setupSwagger from './config/swagger.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
+import paychanguRoutes from './routes/paychangu.js';
 import adminRoutes from './routes/admin.js';
 import resultsRoutes from "./routes/results.js";
 import questionsRoutes from "./routes/questions.js";
@@ -79,6 +80,7 @@ app.get('/api/health', (req, res) => {
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', paychanguRoutes);
 app.use('/api/admin', isAdmin, adminRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/quiz', quizRoutes);
