@@ -418,28 +418,6 @@ app.post('/api/admin/questions', isAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
-
-  // Convert options to JSON string for storage
-  const optionsJson = JSON.stringify(options);
-
-  db.run(
-    'INSERT INTO questions (question, options, correctAnswer, category, difficulty) VALUES (?, ?, ?, ?, ?)',
-    [question, optionsJson, correctAnswer, category, difficulty],
-    function(err) {
-      if (err) {
-        console.error('Error adding question:', err);
-        return res.status(500).json({ error: 'Failed to add question' });
-      }
-
-      res.status(200).json({
-        message: 'Question added successfully',
-        question: { id: this.lastID, question, options, correctAnswer, category, difficulty }
-      });
-
-      db.close();
-    }
-  );
 });
 // Admin route to delete a question
 app.delete('/api/admin/questions/:id', isAdmin, async (req, res) => {
@@ -682,22 +660,15 @@ app.put("/api/admin/questions/:id", isAdmin, async (req, res) => {
   const { id } = req.params;
   const { question, options, correctAnswer, category, difficulty } = req.body;
 
-  const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
-  
   try {
+    // Convert options to JSON string for storage
     const optionsJson = JSON.stringify(options);
-    const query = `
-      UPDATE questions 
-      SET question = ?, options = ?, correctAnswer = ?, category = ?, difficulty = ?
-      WHERE id = ?
-    `;
-    
-    await new Promise((resolve, reject) => {
-      db.run(query, [question, optionsJson, correctAnswer, category, difficulty, id], function(err) {
-        if (err) reject(err);
-        else resolve(this.changes);
-      });
-    });
+
+    // Update the question in the database
+    await db.none(
+      'UPDATE questions SET question = $1, options = $2, correct_answer = $3, category = $4, difficulty = $5 WHERE id = $6',
+      [question, optionsJson, correctAnswer, category, difficulty, id]
+    );
 
     res.json({ 
       success: true, 
@@ -707,8 +678,6 @@ app.put("/api/admin/questions/:id", isAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error updating question:', error);
     res.status(500).json({ error: 'Failed to update question' });
-  } finally {
-    db.close();
   }
 });
 

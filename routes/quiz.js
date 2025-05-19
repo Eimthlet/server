@@ -1,10 +1,8 @@
 import express from 'express';
-import sqlite3 from 'sqlite3';
-import path from 'path';
 import jwt from 'jsonwebtoken';
+import db from '../config/database.js';
 
 const router = express.Router();
-const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
 
 // Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
@@ -25,7 +23,7 @@ const verifyToken = (req, res, next) => {
 };
 
 // Route to disqualify user from quiz
-router.post('/disqualify', verifyToken, (req, res) => {
+router.post('/disqualify', verifyToken, async (req, res) => {
   const { userId } = req.body;
 
   if (!userId) {
@@ -37,14 +35,13 @@ router.post('/disqualify', verifyToken, (req, res) => {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
-  db.run('UPDATE users SET disqualified = 1 WHERE id = $1', [userId], (err) => {
-    if (err) {
-      console.error('Error disqualifying user:', err);
-      return res.status(500).json({ error: 'Could not disqualify user' });
-    }
-
+  try {
+    await db.none('UPDATE users SET disqualified = true WHERE id = $1', [userId]);
     res.json({ message: 'User disqualified successfully' });
-  });
+  } catch (error) {
+    console.error('Error disqualifying user:', error);
+    res.status(500).json({ error: 'Could not disqualify user' });
+  }
 });
 
 export default router;
