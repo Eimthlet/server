@@ -1,12 +1,12 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import sqlite3 from 'sqlite3';
+import db from '../config/database.js';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import crypto from 'crypto';
 
 const router = express.Router();
-const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
+const db = db;
 
 // Remove the fallback to ensure consistent secret usage
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -34,64 +34,49 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
 
   try {
     // Check if user already exists
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-      if (err) {
-        console.error('Database error during user check:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      if (user) {
-        console.log('Registration failed: Email already exists:', email);
-        return res.status(400).json({ error: 'Email already registered' });
-      }
+    const user = await db.one('SELECT * FROM users WHERE email = $1', [email]);
+    if (user) {
+      console.log('Registration failed: Email already exists:', email);
+      return res.status(400).json({ error: 'Email already registered' });
+    }
 
-      try {
-        // Hash password and create user
-        const hashedPassword = await bcrypt.hash(password, 10);
-        // Generate a default username if not provided
-        const defaultUsername = email.split('@')[0];
-        const finalUsername = username || defaultUsername;
-        const refreshToken = generateRefreshToken();
+    // Hash password and create user
+    const hashedPassword = await bcrypt.hash(password, 10);
+    // Generate a default username if not provided
+    const defaultUsername = email.split('@')[0];
+    const finalUsername = username || defaultUsername;
+    const refreshToken = generateRefreshToken();
 
-        db.run(
-          'INSERT INTO users (username, email, password, is_admin, refresh_token) VALUES (?, ?, ?, ?, ?)',
-          [finalUsername, email, hashedPassword, email.endsWith('@admin.com') ? 1 : 0, refreshToken],
-          function (err) {
-            if (err) {
-              console.error('Error creating user:', err);
-              return res.status(500).json({ error: 'Could not create user' });
-            }
+    const result = await db.one(
+      'INSERT INTO users (username, email, password, is_admin, refresh_token) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [finalUsername, email, hashedPassword, email.endsWith('@admin.com'), refreshToken]
+    );
 
-            const token = jwt.sign(
-              { 
-                id: this.lastID, 
-                email, 
-                isAdmin: email.endsWith('@admin.com'),
-                exp: Math.floor(Date.now() / 1000) + (60 * 60) // 1 hour
-              }, 
-              JWT_SECRET
-            );
+    const token = jwt.sign(
+      { 
+        id: result.id, 
+        email, 
+        isAdmin: email.endsWith('@admin.com'),
+        exp: Math.floor(Date.now() / 1000) + (60 * 60) // 1 hour
+      }, 
+      JWT_SECRET
+    );
 
-            console.log('User registered successfully:', email);
-            res.json({
-              user: { id: this.lastID, username: finalUsername, email },
-              token,
-              refreshToken
-            });
-          }
-        );
-      } catch (hashError) {
-        console.error('Error hashing password:', hashError);
-        return res.status(500).json({ error: 'Error processing password' });
-      }
+    console.log('User registered successfully:', email);
+    res.json({
+      user: { id: result.id, username: finalUsername, email },
+      token,
+      refreshToken
     });
   } catch (error) {
-    console.error('Server error during registration:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Database error during registration:', error);
+    res.status(500).json({ error: 'Database error' });
   }
+
 });
 
 // Login endpoint
-router.post(['/login', '/api/auth/login'], (req, res) => {
+router.post(['/login', '/api/auth/login'], async (req, res) => {
   console.log('Login request received:', { email: req.body.email });
   const { email, password } = req.body;
 
@@ -100,14 +85,8 @@ router.post(['/login', '/api/auth/login'], (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-    if (err) {
-      console.error('Database error during login:', {
-        error: err,
-        email: email
-      });
-      return res.status(500).json({ error: 'Database error' });
-    }
+  try {
+    const user = await db.one('SELECT * FROM users WHERE email = $1', [email]);
     if (!user) {
       console.log('Login failed: User not found', {
         email: email,
@@ -116,89 +95,33 @@ router.post(['/login', '/api/auth/login'], (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    try {
-      const isValidPassword = await bcrypt.compare(password, user.password);
-      if (!isValidPassword) {
-        console.log('Login failed: Invalid password', {
-          email: email,
-          isAdmin: user.is_admin === 1,
-          adminLoginAttempt: email.endsWith('@admin.com')
-        });
-        return res.status(401).json({ 
-          error: 'Invalid credentials', 
-          details: 'The password you entered is incorrect. Please try again.'
-        });
-      }
-
-      // Additional check for admin authentication
-      if (email.endsWith('@admin.com') && user.is_admin !== 1) {
-        console.log('Login failed: Non-admin user attempting admin login', {
-          email: email,
-          userId: user.id
-        });
-        return res.status(403).json({ error: 'Unauthorized admin access' });
-      }
-
-      const refreshToken = generateRefreshToken();
-
-      // Update user's refresh token in the database
-      db.run('UPDATE users SET refresh_token = ? WHERE id = ?', [refreshToken, user.id], (updateErr) => {
-        if (updateErr) {
-          console.error('Error updating refresh token:', {
-            error: updateErr,
-            userId: user.id,
-            email: email
-          });
-          return res.status(500).json({ error: 'Could not update refresh token' });
-        }
-
-        const token = jwt.sign(
-          { 
-            id: user.id, 
-            email: user.email, 
-            isAdmin: user.is_admin === 1,
-            exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
-          }, 
-          JWT_SECRET
-        );
-
-        console.log('User logged in successfully', {
-          email: email,
-          userId: user.id,
-          isAdmin: user.is_admin === 1
-        });
-        res.json({
-          user: { id: user.id, username: user.username, email: user.email, role: user.is_admin === 1 ? 'admin' : 'user' },
-          token,
-          refreshToken
-        });
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      console.log('Login failed: Invalid password', {
+        email: email,
+        isAdmin: user.is_admin === 1,
+        adminLoginAttempt: email.endsWith('@admin.com')
       });
-    } catch (error) {
-      console.error('Server error during login:', error);
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-});
-
-// Refresh token endpoint
-router.post('/refresh', (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (!refreshToken) {
-    return res.status(401).json({ error: 'Refresh token is required' });
-  }
-
-  db.get('SELECT * FROM users WHERE refresh_token = ?', [refreshToken], (err, user) => {
-    if (err) {
-      console.error('Database error during token refresh:', err);
-      return res.status(500).json({ error: 'Database error' });
+      return res.status(401).json({ 
+        error: 'Invalid credentials', 
+        details: 'The password you entered is incorrect. Please try again.'
+      });
     }
 
-    if (!user) {
-      return res.status(403).json({ error: 'Invalid refresh token' });
+    // Additional check for admin authentication
+    if (email.endsWith('@admin.com') && user.is_admin !== 1) {
+      console.log('Login failed: Non-admin user attempting admin login', {
+        email: email,
+        userId: user.id
+      });
+      return res.status(403).json({ error: 'Unauthorized admin access' });
     }
 
-    // Generate new access token
+    const refreshToken = generateRefreshToken();
+
+    // Update user's refresh token in the database
+    await db.none('UPDATE users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);
+
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -209,22 +132,59 @@ router.post('/refresh', (req, res) => {
       JWT_SECRET
     );
 
-    // Optional: Generate a new refresh token for added security
+    console.log('User logged in successfully', {
+      email: email,
+      userId: user.id,
+      isAdmin: user.is_admin === 1
+    });
+    res.json({
+      user: { id: user.id, username: user.username, email: user.email, role: user.is_admin === 1 ? 'admin' : 'user' },
+      token,
+      refreshToken
+    });
+  } catch (error) {
+    console.error('Database error during login:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Refresh token endpoint
+router.post('/refresh', async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token is required' });
+  }
+
+  try {
+    const user = await db.one('SELECT * FROM users WHERE refresh_token = $1', [refreshToken]);
+    if (!user) {
+      return res.status(403).json({ error: 'Invalid refresh token' });
+    }
+
     const newRefreshToken = generateRefreshToken();
 
     // Update user's refresh token in the database
-    db.run('UPDATE users SET refresh_token = ? WHERE id = ?', [newRefreshToken, user.id], (updateErr) => {
-      if (updateErr) {
-        console.error('Error updating refresh token:', updateErr);
-        return res.status(500).json({ error: 'Could not update refresh token' });
-      }
+    await db.none('UPDATE users SET refresh_token = $1 WHERE id = $2', [newRefreshToken, user.id]);
 
-      res.json({
-        token,
-        refreshToken: newRefreshToken
-      });
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email, 
+        isAdmin: user.is_admin === 1,
+        exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
+      }, 
+      JWT_SECRET
+    );
+
+    res.json({
+      token,
+      refreshToken: newRefreshToken
     });
-  });
+  } catch (error) {
+    console.error('Error updating refresh token:', error);
+    res.status(500).json({ error: 'Could not update refresh token' });
+  }
 });
 
 // Route to check token validity
