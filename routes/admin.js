@@ -114,7 +114,7 @@ router.get('/stats/:userId', isAdmin, async (req, res) => {
 });
 
 // Get season statistics
-router.get('/seasons', isAdmin, (req, res) => {
+router.get('/seasons', isAdmin, async (req, res) => {
   const query = `
     SELECT 
       s.id,
@@ -129,10 +129,8 @@ router.get('/seasons', isAdmin, (req, res) => {
     ORDER BY s.start_date DESC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching season stats:', err);
-      return res.status(500).json({ error: 'Database error' });
+  try {
+    const rows = await db.any(query);
     res.json(rows);
   } catch (error) {
     console.error('Error fetching season stats:', error);
@@ -161,70 +159,54 @@ router.post('/seasons', isAdmin, async (req, res) => {
     console.error('Error creating season:', error);
     res.status(500).json({ error: 'Database error' });
   }
-          return res.status(500).json({ error: 'Database error' });
-        }
-        res.json(season);
-      }
-    );
-  });
 });
 
 // Update a season
-router.put('/seasons/:id', isAdmin, (req, res) => {
-  const { id } = req.params;
-  const { name, startDate, endDate } = req.body;
-  
-  const updates = [];
-  const values = [];
-  
-  if (name) {
-    updates.push('name = ?');
-    values.push(name);
-  }
-  if (startDate) {
-    updates.push('start_date = ?');
-    values.push(startDate);
-  }
-  if (endDate) {
-    updates.push('end_date = ?');
-    values.push(endDate);
-  }
-  
-  if (updates.length === 0) {
-    return res.status(400).json({ error: 'No updates provided' });
-  }
-  
-  values.push(id);
-  
-  const query = `
-    UPDATE seasons 
-    SET ${updates.join(', ')}
-    WHERE id = ?
-  `;
-
-  db.run(query, values, function(err) {
-    if (err) {
-      console.error('Error updating season:', err);
-      return res.status(500).json({ error: 'Database error' });
+router.put('/seasons/:id', isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, startDate, endDate } = req.body;
+    
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+    
+    if (name) {
+      updates.push(`name = $${paramCount++}`);
+      values.push(name);
+    }
+    if (startDate) {
+      updates.push(`start_date = $${paramCount++}`);
+      values.push(startDate);
+    }
+    if (endDate) {
+      updates.push(`end_date = $${paramCount++}`);
+      values.push(endDate);
     }
     
-    if (this.changes === 0) {
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No updates provided' });
+    }
+    
+    values.push(id);
+    
+    const query = `
+      UPDATE seasons 
+      SET ${updates.join(', ')}
+      WHERE id = $${values.length}
+      RETURNING *`;
+
+    const result = await db.oneOrNone(query, values);
+    
+    if (!result) {
       return res.status(404).json({ error: 'Season not found' });
     }
     
-    // Return the updated season
-    db.get(
-      'SELECT * FROM seasons WHERE id = ?',
-      [id],
-      (err, season) => {
-        if (err) {
-          console.error('Error fetching updated season:', err);
-          return res.status(500).json({ error: 'Database error' });
-        }
-        res.json(season);
-      }
-    );
-  });
+    res.json(result);
+  } catch (error) {
+    console.error('Error updating season:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Delete a season
@@ -242,29 +224,21 @@ router.delete('/seasons/:id', isAdmin, async (req, res) => {
 
 // Activate a season
 router.put('/seasons/:id/activate', isAdmin, async (req, res) => {
-  const { id } = req.params;
-
   try {
-    await db.none('UPDATE seasons SET is_active = 0');
-    await db.none('UPDATE seasons SET is_active = 1 WHERE id = $1', [id]);
+    const { id } = req.params;
+    
+    await db.none('UPDATE seasons SET is_active = false');
+    await db.none('UPDATE seasons SET is_active = true WHERE id = $1', [id]);
     const season = await db.one('SELECT * FROM seasons WHERE id = $1', [id]);
     res.json(season);
   } catch (error) {
     console.error('Error activating season:', error);
     res.status(500).json({ error: 'Database error' });
   }
-              return res.status(500).json({ error: 'Database error' });
-            }
-            res.json(season);
-          }
-        );
-      });
-    });
-  });
 });
 
 // Create a new round
-router.post('/rounds', isAdmin, (req, res) => {
+router.post('/rounds', isAdmin, async (req, res) => {
   const { name, startDate, endDate, seasonId, roundNumber } = req.body;
   
   if (!name || !startDate || !endDate || !seasonId || !roundNumber) {
