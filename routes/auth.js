@@ -33,7 +33,7 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
 
   try {
     // Check if user already exists
-    const user = await db.one('SELECT * FROM users WHERE email = $1', [email]);
+    const user = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
     if (user) {
       console.log('Registration failed: Email already exists:', email);
       return res.status(400).json({ error: 'Email already registered' });
@@ -85,7 +85,8 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
   }
 
   try {
-    const user = await db.one('SELECT * FROM users WHERE email = $1', [email]);
+    // Use oneOrNone instead of one to avoid error when user doesn't exist
+    const user = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
     if (!user) {
       console.log('Login failed: User not found', {
         email: email,
@@ -143,7 +144,7 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
     });
   } catch (error) {
     console.error('Database error during login:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error', details: error.message });
   }
 });
 
