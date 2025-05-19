@@ -1,46 +1,81 @@
-# Getting Started with Create React App
+# Quiz Backend Server
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This is the backend server for the Quiz application, built with Node.js, Express, and PostgreSQL.
+
+## Prerequisites
+
+- Node.js (v14 or higher)
+- PostgreSQL (v12 or higher)
+- npm or yarn
+
+## Setup
+
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Set up environment variables**:
+   Create a `.env` file in the root directory with the following variables:
+   ```
+   PORT=5000
+   JWT_SECRET=your_jwt_secret_key
+   DATABASE_HOST=localhost
+   DATABASE_PORT=5432
+   DATABASE_NAME=quiz_db
+   DATABASE_USER=your_db_user
+   DATABASE_PASSWORD=your_db_password
+   NODE_ENV=development
+   ```
+
+3. **Set up the database**:
+   - Create a new PostgreSQL database
+   - Run the migrations:
+     ```bash
+     node migrations/run-migrations.js
+     ```
+
+4. **Seed the database** (optional):
+   - Seed questions:
+     ```bash
+     node seed.js
+     ```
+   - Create an admin user:
+     ```bash
+     node seed_admin_user.js
+     ```
 
 ## Available Scripts
 
-In the project directory, you can run:
+- `npm start` - Start the server in production mode
+- `npm run dev` - Start the server in development mode with nodemon
+- `npm run migrate` - Run database migrations
+- `npm run seed` - Seed the database with sample data
+- `npm run check-db` - Check database connection and schema
 
-### `npm start`
+## API Documentation
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+The API documentation is available at `/api-docs` when the server is running in development mode.
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## Database Schema
 
-### `npm test`
+The database schema is defined in `migrations/postgres.sql`. Key tables include:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- `users` - User accounts and authentication
+- `questions` - Quiz questions and answers
+- `seasons` - Quiz seasons/competitions
+- `rounds` - Rounds within each season
+- `quiz_results` - User quiz results
 
-### `npm run build`
+## Deployment
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+For production deployment:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1. Set `NODE_ENV=production` in your environment variables
+2. Ensure all database connection details are correctly configured
+3. Use a process manager like PM2 to keep the server running
+4. Set up a reverse proxy (e.g., Nginx) for better performance and security
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## License
 
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
-
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+This project is licensed under the MIT License.

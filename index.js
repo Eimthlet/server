@@ -1,34 +1,52 @@
 import 'dotenv/config';
 import express from "express";
 import cors from "cors";
-import db from './config/database.js';
 import jwt from 'jsonwebtoken';
+
+// Config
+import db from './config/database.js';
+import setupSwagger from './config/swagger.js';
+
+// Routes
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import resultsRoutes from "./routes/results.js";
 import questionsRoutes from "./routes/questions.js";
 import quizRoutes from "./routes/quiz.js";
-import { promises as fs } from 'fs';
-import path from 'path';
 
-const QUESTIONS_DB_PATH = path.join(process.cwd(), 'questions.json');
-const USERS_DB_PATH = path.join(process.cwd(), 'users.json');
-const DISQUALIFIED_USERS_PATH = path.join(process.cwd(), 'disqualified_users.json');
+// Middleware
+import { isAdmin, authenticateUser } from './middleware/auth.js';
 
+// Initialize Express app
 const app = express();
 const port = process.env.PORT || 5000;
 
+// Setup Swagger documentation
+if (process.env.NODE_ENV !== 'production') {
+  setupSwagger(app);
+}
+
+// Middleware
 app.use(cors({
   origin: [
-    process.env.FRONTEND_URL,'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app'
+    process.env.FRONTEND_URL,
+    'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app'
   ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token'],
   credentials: true,
   exposedHeaders: ['Access-Control-Allow-Origin']
 }));
+
 app.use(express.json());
+app.use(express.static('public'));
 app.options('*', cors()); // Enable pre-flight requests for all routes
+
+// Log all requests
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -103,65 +121,55 @@ function isAdmin(req, res, next) {
   }
 }
 
-// Middleware to check if user is disqualified
-async function checkDisqualification(req, res, next) {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+// Authentication middleware moved to middleware/auth.js
 
-    // Read disqualified users
-    let disqualifiedUsers = [];
-    try {
-      const data = await fs.readFile(DISQUALIFIED_USERS_PATH, 'utf8');
-      disqualifiedUsers = JSON.parse(data);
-    } catch (readError) {
-      // If file doesn't exist, start with an empty array
-      if (readError.code !== 'ENOENT') {
-        throw readError;
-      }
-    }
-
-    // Check if user is disqualified
-    const isDisqualified = disqualifiedUsers.some(user => user.id === decoded.id);
-    if (isDisqualified) {
-      return res.status(403).json({ 
-        error: 'Account Disqualified', 
-        details: 'Your account has been disqualified from admin access.' 
-      });
-    }
-
-    next();
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-}
-
-export { isAdmin, checkDisqualification };
-
-// Mount routes with detailed logging
-console.log('Mounting routes', {
-  authRoutes: '/api/auth',
-  questionsRoutes: '/api/questions',
-  adminRoutes: '/api/admin',
-  resultsRoutes: '/api/results'
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Health check endpoint
+ *     description: Returns the health status of the API
+ *     responses:
+ *       200:
+ *         description: API is running
+ */
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Questions routes with additional logging
-app.use('/api/questions', (req, res, next) => {
-  console.log('Questions route middleware', {
-    method: req.method,
-    path: req.path,
-    headers: req.headers,
-    timestamp: new Date().toISOString()
-  });
-  next();
-}, questionsRoutes);
-
-app.use('/api/questions', questionsRoutes);
-app.use('/api', quizRoutes);
+// Mount API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/admin', isAdmin, adminRoutes); 
+app.use('/api/admin', isAdmin, adminRoutes);
+app.use('/api/questions', questionsRoutes);
+app.use('/api/quiz', quizRoutes);
 app.use('/api/results', resultsRoutes);
+
+// 404 Handler for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Global error handler:', err);
+  
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  
+  // Handle database errors
+  if (err.code === '23505') { // Unique violation
+    return res.status(409).json({ error: 'Duplicate entry', details: err.detail });
+  }
+  
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'production' 
+      ? 'An unexpected error occurred' 
+      : err.message
+  });
+});
 
 // Progress endpoint (moved from auth routes)
 app.post("/api/progress", async (req, res) => {
@@ -663,7 +671,7 @@ app.put("/api/admin/questions/:id", isAdmin, async (req, res) => {
   try {
     // Convert options to JSON string for storage
     const optionsJson = JSON.stringify(options);
-
+    
     // Update the question in the database
     await db.none(
       'UPDATE questions SET question = $1, options = $2, correct_answer = $3, category = $4, difficulty = $5 WHERE id = $6',

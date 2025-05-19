@@ -1,7 +1,5 @@
 import express from 'express';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import path from 'path';
+import db from '../config/database.js';
 
 const router = express.Router();
 
@@ -15,21 +13,10 @@ router.get('/', async (req, res) => {
   });
 
   try {
-    console.log('Attempting to open database', {
-      dbPath: path.resolve('./quiz.db')
-    });
-    const db = await open({
-      filename: './quiz.db',
-      driver: sqlite3.Database
-    });
-    console.log('Database opened successfully');
-
-    console.log('Checking database schema');
-    const tableInfo = await db.all(`PRAGMA table_info(questions)`);
-    console.log('Questions table schema:', tableInfo);
-
     console.log('Fetching questions from database');
-    const questions = await db.all('SELECT * FROM questions');
+    
+    // Check if questions table exists and has data
+    const questions = await db.any('SELECT * FROM questions');
     console.log(`Fetched ${questions.length} questions`, {
       questionIds: questions.map(q => q.id),
       questionDetails: questions.slice(0, 2) // Log first 2 questions for debugging
@@ -41,29 +28,32 @@ router.get('/', async (req, res) => {
       const sampleQuestions = [
         {
           question: 'What is the capital of France?',
-          options: JSON.stringify(['London', 'Paris', 'Madrid']),
+          options: ['London', 'Paris', 'Madrid'],
           correctAnswer: 'Paris',
           category: 'General',
           difficulty: 'Medium'
         },
         {
           question: 'Which planet is known as the Red Planet?',
-          options: JSON.stringify(['Venus', 'Mars', 'Jupiter', 'Saturn']),
+          options: ['Venus', 'Mars', 'Jupiter', 'Saturn'],
           correctAnswer: 'Mars',
           category: 'General',
           difficulty: 'Medium'
         }
       ];
 
-      for (const q of sampleQuestions) {
-        await db.run(
-          'INSERT INTO questions (question, options, correctAnswer, category, difficulty) VALUES (?, ?, ?, ?, ?)', 
-          [q.question, q.options, q.correctAnswer, q.category, q.difficulty]
-        );
-      }
+      // Insert sample questions in a transaction
+      await db.tx(async t => {
+        for (const q of sampleQuestions) {
+          await t.none(
+            'INSERT INTO questions (question, options, correct_answer, category, difficulty) VALUES ($1, $2, $3, $4, $5)', 
+            [q.question, JSON.stringify(q.options), q.correctAnswer, q.category, q.difficulty]
+          );
+        }
+      });
 
       // Refetch questions after insertion
-      const updatedQuestions = await db.all('SELECT * FROM questions');
+      const updatedQuestions = await db.any('SELECT * FROM questions');
       
       if (updatedQuestions.length === 0) {
         return res.status(500).json({ 
@@ -72,19 +62,19 @@ router.get('/', async (req, res) => {
           details: 'Unable to populate questions table' 
         });
       }
+      
+      // Use the updated questions
+      questions.push(...updatedQuestions);
     }
 
     const formattedQuestions = questions.map(q => ({
       id: q.id,
       question: q.question,
       options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
-      correctAnswer: q.correctAnswer,
+      correctAnswer: q.correct_answer, // Note: Using correct_answer instead of correctAnswer
       category: q.category,
       difficulty: q.difficulty
     }));
-
-    console.log('Closing database connection');
-    await db.close();
 
     console.log('Sending questions response', {
       questionCount: formattedQuestions.length,

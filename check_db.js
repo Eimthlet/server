@@ -1,30 +1,54 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+import db from './config/database.js';
 
-const dbPath = path.join(__dirname, 'quiz.db');
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Error opening database:', err);
-    return;
-  }
-  console.log('Database opened successfully');
-
-  // Check table schema
-  db.all("PRAGMA table_info(questions)", (err, tableInfo) => {
-    if (err) {
-      console.error('Error checking table schema:', err);
-      return;
-    }
-    console.log('Questions table schema:', tableInfo);
-
-    // Fetch questions
-    db.all("SELECT * FROM questions LIMIT 5", (err, rows) => {
-      if (err) {
-        console.error('Error fetching questions:', err);
-        return;
+async function checkDatabase() {
+  try {
+    console.log('Checking database connection...');
+    
+    // Test connection
+    await db.one('SELECT NOW()');
+    console.log('✓ Database connection successful');
+    
+    // Check tables
+    console.log('\nChecking tables...');
+    const tables = ['users', 'questions', 'seasons', 'rounds', 'quiz_results'];
+    
+    for (const table of tables) {
+      try {
+        const exists = await db.oneOrNone(
+          `SELECT to_regclass('public.${table}') as exists`
+        );
+        console.log(`- ${table}: ${exists ? '✓ Exists' : '✗ Missing'}`);
+        
+        if (exists) {
+          const count = await db.one(
+            `SELECT COUNT(*) FROM ${table}`,
+            [],
+            a => +a.count
+          );
+          console.log(`  Rows: ${count}`);
+        }
+      } catch (err) {
+        console.error(`Error checking table ${table}:`, err.message);
       }
-      console.log('Questions:', rows);
-      db.close();
-    });
-  });
-});
+    }
+    
+    // Check for admin user
+    console.log('\nChecking admin user...');
+    const admin = await db.oneOrNone(
+      'SELECT id, email, is_admin FROM users WHERE is_admin = true LIMIT 1'
+    );
+    
+    if (admin) {
+      console.log(`✓ Admin user found: ${admin.email}`);
+    } else {
+      console.log('✗ No admin user found');
+    }
+    
+  } catch (error) {
+    console.error('Database check failed:', error);
+  } finally {
+    process.exit();
+  }
+}
+
+checkDatabase();

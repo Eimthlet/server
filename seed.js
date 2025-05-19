@@ -1,50 +1,98 @@
-import sqlite3 from "sqlite3";
+import db from './config/database.js';
 
-const db = new sqlite3.Database("quiz.db");
+async function seedQuestions() {
+  try {
+    // Clear existing questions
+    await db.none('TRUNCATE TABLE questions RESTART IDENTITY CASCADE');
 
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS questions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    question TEXT NOT NULL,
-    optionA TEXT NOT NULL,
-    optionB TEXT NOT NULL,
-    optionC TEXT NOT NULL,
-    optionD TEXT NOT NULL,
-    answer TEXT NOT NULL
-  )`);
+    const questions = [
+      {
+        question: "What car company produces the Mustang?",
+        options: ["Ford", "Chevrolet", "Dodge", "Toyota"],
+        correctAnswer: "Ford",
+        category: "Brands",
+        difficulty: "Easy"
+      },
+      {
+        question: "Which country is home to the car manufacturer Ferrari?",
+        options: ["Germany", "Italy", "France", "Japan"],
+        correctAnswer: "Italy",
+        category: "Brands",
+        difficulty: "Easy"
+      },
+      {
+        question: "What does 'SUV' stand for?",
+        options: ["Sport Utility Vehicle", "Super Urban Vehicle", "Standard Utility Van", "Special Utility Vehicle"],
+        correctAnswer: "Sport Utility Vehicle",
+        category: "Terminology",
+        difficulty: "Easy"
+      },
+      {
+        question: "Which car brand has a prancing horse as its logo?",
+        options: ["Lamborghini", "Ferrari", "Porsche", "Jaguar"],
+        correctAnswer: "Ferrari",
+        category: "Brands",
+        difficulty: "Easy"
+      },
+      {
+        question: "What is the world's best-selling electric car model?",
+        options: ["Tesla Model 3", "Nissan Leaf", "Chevy Bolt", "BMW i3"],
+        correctAnswer: "Tesla Model 3",
+        category: "Electric Vehicles",
+        difficulty: "Medium"
+      },
+      {
+        question: "Which car company makes the Civic?",
+        options: ["Honda", "Toyota", "Hyundai", "Mazda"],
+        correctAnswer: "Honda",
+        category: "Brands",
+        difficulty: "Easy"
+      },
+      {
+        question: "What is the luxury division of Toyota?",
+        options: ["Lexus", "Infiniti", "Acura", "Genesis"],
+        correctAnswer: "Lexus",
+        category: "Brands",
+        difficulty: "Easy"
+      },
+      {
+        question: "Which German brand is known for the 'M' performance series?",
+        options: ["Audi", "BMW", "Mercedes-Benz", "Volkswagen"],
+        correctAnswer: "BMW",
+        category: "Performance",
+        difficulty: "Medium"
+      },
+      {
+        question: "What is the name of Volkswagen's iconic compact car?",
+        options: ["Golf", "Polo", "Beetle", "Passat"],
+        correctAnswer: "Beetle",
+        category: "Models",
+        difficulty: "Easy"
+      },
+      {
+        question: "Which car company uses the slogan 'The Ultimate Driving Machine'?",
+        options: ["Audi", "Mercedes-Benz", "BMW", "Porsche"],
+        correctAnswer: "BMW",
+        category: "Brands",
+        difficulty: "Easy"
+      }
+    ];
 
-  db.run("DELETE FROM questions"); // Clear previous data
+    // Insert questions
+    for (const q of questions) {
+      await db.none(
+        `INSERT INTO questions (question, options, correct_answer, category, difficulty) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [q.question, q.options, q.correctAnswer, q.category, q.difficulty]
+      );
+    }
 
-  const stmt = db.prepare("INSERT INTO questions (question, optionA, optionB, optionC, optionD, answer) VALUES (?, ?, ?, ?, ?, ?)");
-
-  const questions = [
-    ["What car company produces the Mustang?", "Ford", "Chevrolet", "Dodge", "Toyota", "Ford"],
-    ["Which country is home to the car manufacturer Ferrari?", "Germany", "Italy", "France", "Japan", "Italy"],
-    ["What does 'SUV' stand for?", "Sport Utility Vehicle", "Super Urban Vehicle", "Standard Utility Van", "Special Utility Vehicle", "Sport Utility Vehicle"],
-    ["Which car brand has a prancing horse as its logo?", "Lamborghini", "Ferrari", "Porsche", "Jaguar", "Ferrari"],
-    ["What is the world's best-selling electric car model?", "Tesla Model 3", "Nissan Leaf", "Chevy Bolt", "BMW i3", "Tesla Model 3"],
-    ["Which car company makes the Civic?", "Honda", "Toyota", "Hyundai", "Mazda", "Honda"],
-    ["What is the luxury division of Toyota?", "Lexus", "Infiniti", "Acura", "Genesis", "Lexus"],
-    ["Which German brand is known for the 'M' performance series?", "Audi", "BMW", "Mercedes-Benz", "Volkswagen", "BMW"],
-    ["What is the name of Volkswagen's iconic compact car?", "Golf", "Polo", "Beetle", "Passat", "Beetle"],
-    ["Which car company uses the slogan 'The Ultimate Driving Machine'?", "Audi", "Mercedes-Benz", "BMW", "Porsche", "BMW"],
-    ["Which car is often called the 'Godzilla' in the car community?", "Nissan GT-R", "Toyota Supra", "Mazda RX-7", "Subaru WRX", "Nissan GT-R"],
-    ["Which automaker produces the Camry?", "Toyota", "Honda", "Nissan", "Kia", "Toyota"],
-    ["What country is Volvo from?", "Germany", "Sweden", "Norway", "Denmark", "Sweden"],
-    ["Which car brand's logo features four interlocked rings?", "Audi", "Subaru", "Volkswagen", "Opel", "Audi"],
-    ["Which Japanese car brand makes the Impreza?", "Toyota", "Honda", "Subaru", "Mazda", "Subaru"],
-    ["What does 'GT' stand for in car models?", "Grand Touring", "Great Traction", "Gas Turbo", "General Transport", "Grand Touring"],
-    ["Which Italian brand is famous for the Countach?", "Ferrari", "Lamborghini", "Maserati", "Alfa Romeo", "Lamborghini"],
-    ["Which car company produces the F-150 truck?", "Chevrolet", "Ford", "Ram", "Toyota", "Ford"],
-    ["What is the main luxury brand of Honda?", "Lexus", "Acura", "Infiniti", "Genesis", "Acura"],
-    ["Which French carmaker is known for the 2CV?", "Peugeot", "Citroën", "Renault", "Bugatti", "Citroën"]
-  ];
-
-  for (const q of questions) {
-    stmt.run(q);
+    console.log(`Successfully seeded ${questions.length} questions`);
+    process.exit(0);
+  } catch (error) {
+    console.error('Error seeding questions:', error);
+    process.exit(1);
   }
-  stmt.finalize();
-});
+}
 
-db.close();
-console.log("Database seeded with 20 questions.");
+seedQuestions();
