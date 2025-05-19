@@ -47,7 +47,7 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     const refreshToken = generateRefreshToken();
 
     const result = await db.one(
-      'INSERT INTO users (username, email, password, is_admin, refresh_token) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      'INSERT INTO users (username, email, password_hash, is_admin, refresh_token) VALUES ($1, $2, $3, $4, $5) RETURNING id',
       [finalUsername, email, hashedPassword, email.endsWith('@admin.com'), refreshToken]
     );
 
@@ -95,7 +95,7 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
       console.log('Login failed: Invalid password', {
         email: email,
