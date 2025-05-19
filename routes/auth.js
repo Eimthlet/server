@@ -6,7 +6,6 @@ import path from 'path';
 import crypto from 'crypto';
 
 const router = express.Router();
-const db = db;
 
 // Remove the fallback to ensure consistent secret usage
 const JWT_SECRET = process.env.JWT_SECRET;
