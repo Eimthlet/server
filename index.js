@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from "express";
 import cors from "cors";
-import sqlite3 from 'sqlite3';
+import db from './config/database.js';
 import jwt from 'jsonwebtoken';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -164,47 +164,40 @@ app.use('/api/admin', isAdmin, adminRoutes);
 app.use('/api/results', resultsRoutes);
 
 // Progress endpoint (moved from auth routes)
-app.post("/api/progress", (req, res) => {
+app.post("/api/progress", async (req, res) => {
   const { userId, score, total } = req.body;
   if (!userId || score == null || total == null) {
     return res.status(400).json({ error: "userId, score, total required" });
   }
   
-  const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
-  db.run(
-    "INSERT INTO progress (user_id, score, total) VALUES (?, ?, ?)",
-    [userId, score, total],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.json({ success: true, id: this.lastID });
-      }
-      db.close();
-    }
-  );
+  try {
+    const result = await db.one(
+      'INSERT INTO progress (user_id, score, total) VALUES ($1, $2, $3) RETURNING id',
+      [userId, score, total]
+    );
+    res.json({ success: true, id: result.id });
+  } catch (error) {
+    console.error('Error adding progress:', error);
+    res.status(500).json({ error: 'Failed to add progress' });
+  }
 });
 
 // Leaderboard endpoint: Top users by highest score
-app.get("/api/results/leaderboard", (req, res) => {
-  const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
-  const query = `
-    SELECT u.id, u.username, MAX(p.score) as max_score, COUNT(p.id) as games_played
-    FROM users u
-    JOIN progress p ON u.id = p.user_id
-    GROUP BY u.id, u.username
-    ORDER BY max_score DESC, games_played DESC
-    LIMIT 20
-  `;
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      console.error("Leaderboard SQL error:", err);
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json({ leaderboard: rows });
-    }
-    db.close();
-  });
+app.get("/api/results/leaderboard", async (req, res) => {
+  try {
+    const leaderboard = await db.any(`
+      SELECT u.id, u.username, MAX(p.score) as max_score, COUNT(p.id) as games_played
+      FROM users u
+      JOIN progress p ON u.id = p.user_id
+      GROUP BY u.id, u.username
+      ORDER BY max_score DESC, games_played DESC
+      LIMIT 20
+    `);
+    res.json({ leaderboard });
+  } catch (error) {
+    console.error('Leaderboard error:', error);
+    res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
 });
 
 // Insights statistics endpoint
@@ -390,41 +383,34 @@ function authenticateUser(req, res, next) {
 }
 
 // Endpoint to get all questions
-app.get("/api/questions", authenticateUser, (req, res) => {
-  const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
-  
-  db.all("SELECT * FROM questions", [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json({ questions: rows });
-    db.close();
-  });
+app.get("/api/questions", authenticateUser, async (req, res) => {
+  try {
+    const questions = await db.any('SELECT * FROM questions');
+    res.json({ questions });
+  } catch (error) {
+    console.error('Error fetching questions:', error);
+    res.status(500).json({ error: 'Failed to fetch questions' });
+  }
 });
 
 // Admin route to get all questions with additional details
-app.get('/api/admin/questions', isAdmin, (req, res) => {
-  const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
-  
-  db.all("SELECT * FROM questions ORDER BY id DESC", [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching admin questions:', err);
-      res.status(500).json({ error: err.message });
-      return;
-    }
+app.get('/api/admin/questions', isAdmin, async (req, res) => {
+  try {
+    const questions = await db.any('SELECT * FROM questions ORDER BY id DESC');
     res.json({ 
-      questions: rows.map(row => ({
+      questions: questions.map(row => ({
         ...row,
         options: JSON.parse(row.options || '[]')
       }))
     });
-    db.close();
-  });
+  } catch (error) {
+    console.error('Error fetching admin questions:', error);
+    res.status(500).json({ error: 'Failed to fetch questions' });
+  }
 });
 
 // Admin route to add a new question
-app.post('/api/admin/questions', isAdmin, (req, res) => {
+app.post('/api/admin/questions', isAdmin, async (req, res) => {
   const { question, options, correctAnswer, category, difficulty } = req.body;
 
   // Basic validation
@@ -455,78 +441,53 @@ app.post('/api/admin/questions', isAdmin, (req, res) => {
     }
   );
 });
-
 // Admin route to delete a question
-app.delete('/api/admin/questions/:id', isAdmin, (req, res) => {
+app.delete('/api/admin/questions/:id', isAdmin, async (req, res) => {
   const questionId = req.params.id;
 
-  const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
-
-  db.run('DELETE FROM questions WHERE id = ?', [questionId], function(err) {
-    if (err) {
-      console.error('Error deleting question:', err);
-      return res.status(500).json({ error: 'Failed to delete question' });
-    }
-
-    if (this.changes === 0) {
+  try {
+    const result = await db.result('DELETE FROM questions WHERE id = $1', [questionId]);
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Question not found' });
     }
-
     res.status(200).json({ message: 'Question deleted successfully' });
-
-    db.close();
-  });
+  } catch (error) {
+    console.error('Error deleting question:', error);
+    res.status(500).json({ error: 'Failed to delete question' });
+  }
 });
 
 // Admin Dashboard Statistics
 app.get("/api/admin/dashboard-stats", isAdmin, async (req, res) => {
-  const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
   
   try {
     const stats = {};
     
     // Get total users
-    const userCountQuery = "SELECT COUNT(*) as count FROM users WHERE is_admin = 0";
-    const userCount = await new Promise((resolve, reject) => {
-      db.get(userCountQuery, [], (err, row) => {
-        if (err) reject(err);
-        else resolve(row.count);
-      });
-    });
-    stats.totalUsers = userCount;
+    // Get total users
+    const userCount = await db.one('SELECT COUNT(*) as count FROM users WHERE is_admin = false');
+    stats.totalUsers = userCount.count;
 
     // Get top players
-    const topPlayersQuery = `
+    const topPlayers = await db.any(`
       SELECT u.username, MAX(p.score) as highest_score, COUNT(p.id) as games_played
       FROM users u
       JOIN progress p ON u.id = p.user_id
-      WHERE u.is_admin = 0
+      WHERE u.is_admin = false
       GROUP BY u.id, u.username
       ORDER BY highest_score DESC, games_played DESC
       LIMIT 5
-    `;
-    const topPlayers = await new Promise((resolve, reject) => {
-      db.all(topPlayersQuery, [], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    `);
     stats.topPlayers = topPlayers;
 
     // Get recent activity
-    const recentActivityQuery = `
+    const recentActivity = await db.any(`
       SELECT u.username, p.score, p.created_at
       FROM progress p
       JOIN users u ON p.user_id = u.id
       ORDER BY p.created_at DESC
       LIMIT 10
-    `;
-    const recentActivity = await new Promise((resolve, reject) => {
-      db.all(recentActivityQuery, [], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    `);
     stats.recentActivity = recentActivity;
 
     res.json(stats);
