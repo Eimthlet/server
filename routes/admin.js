@@ -1,7 +1,8 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { promises as fs } from 'fs';
-import { isAdmin } from '../index.js';
+import path from 'path';
+import { isAdmin } from '../middleware/auth.js';
 import db from '../config/database.js';
 
 // Ensure all routes that require admin access use the middleware

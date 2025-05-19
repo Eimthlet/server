@@ -1,13 +1,15 @@
 import express from 'express';
+import { authenticateUser } from '../middleware/auth.js';
 import db from '../config/database.js';
 
 const router = express.Router();
 
 // Submit quiz result
-router.post('/', async (req, res) => {
-  const { userId, seasonId, roundId, score } = req.body;
+router.post('/', authenticateUser, async (req, res) => {
+  const { seasonId, roundId, score } = req.body;
+  const userId = req.user.id;
 
-  if (!userId || !seasonId || !roundId || score === undefined) {
+  if (!seasonId || !roundId || score === undefined) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -47,8 +49,13 @@ router.post('/', async (req, res) => {
 });
 
 // Get user's results for a season
-router.get('/user/:userId/season/:seasonId', async (req, res) => {
+router.get('/user/:userId/season/:seasonId', authenticateUser, async (req, res) => {
   const { userId, seasonId } = req.params;
+  
+  // Check if the requesting user matches the user whose results are being accessed
+  if (req.user.id !== parseInt(userId)) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
 
   try {
     const results = await db.any(
@@ -67,7 +74,7 @@ router.get('/user/:userId/season/:seasonId', async (req, res) => {
 });
 
 // Get current season and round
-router.get('/current', async (req, res) => {
+router.get('/current', authenticateUser, async (req, res) => {
   try {
     const result = await db.oneOrNone(
       `SELECT s.*, r.id as round_id, r.round_number, r.min_score_to_qualify
