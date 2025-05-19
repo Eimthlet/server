@@ -37,22 +37,26 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     const userByEmail = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
     if (userByEmail) {
       return res.status(400).json({ error: 'Email already registered' });
+      return;
     }
     if (username) {
       const userByUsername = await db.oneOrNone('SELECT * FROM users WHERE username = $1', [username]);
       if (userByUsername) {
         return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
+      return;
       }
     }
     // Also check pending_registrations for duplicates
     const pendingByEmail = await db.oneOrNone('SELECT * FROM pending_registrations WHERE email = $1', [email]);
     if (pendingByEmail) {
       return res.status(400).json({ error: 'A registration is already pending for this email. Complete payment or wait.' });
+      return;
     }
     if (username) {
       const pendingByUsername = await db.oneOrNone('SELECT * FROM pending_registrations WHERE username = $1', [username]);
       if (pendingByUsername) {
         return res.status(400).json({ error: 'A registration is already pending for this username. Complete payment or wait.' });
+      return;
       }
     }
 
@@ -78,9 +82,11 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     if (error.code === '23505') {
       if (error.constraint === 'pending_registrations_tx_ref_key') {
         return res.status(400).json({ error: 'Duplicate transaction reference. Please try again.' });
+      return;
       }
     }
     res.status(500).json({ error: 'Registration failed. Please try again later.' });
+    return;
   }
 
   try {
@@ -89,6 +95,7 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     if (userByEmail) {
       console.log('Registration failed: Email already exists:', email);
       return res.status(400).json({ error: 'Email already registered' });
+      return;
     }
     
     // Check if username is already taken
@@ -97,6 +104,7 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
       if (userByUsername) {
         console.log('Registration failed: Username already exists:', username);
         return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
+      return;
       }
     }
 
@@ -114,9 +122,10 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     );
     
     // Store refresh token in separate table
-    await db.none(
-      'INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2)',
-      [result.id, refreshToken]
+    const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+await db.none(
+      'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [result.id, refreshToken, refreshExpiresAt]
     );
 
     const token = jwt.sign(
@@ -142,13 +151,16 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     if (error.code === '23505') { // Unique constraint violation
       if (error.constraint === 'users_username_key') {
         return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
+      return;
       } else if (error.constraint === 'users_email_key') {
         return res.status(400).json({ error: 'Email already registered' });
+      return;
       }
     }
     
     // Generic error for other cases
     res.status(500).json({ error: 'Registration failed. Please try again later.' });
+    return;
   }
 });
 
@@ -201,7 +213,8 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
     // First delete any existing tokens for this user
     await db.none('DELETE FROM refresh_tokens WHERE user_id = $1', [user.id]);
     // Then insert the new token
-    await db.none('INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2)', [user.id, refreshToken]);
+    const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+    await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, refreshToken, refreshExpiresAt]);
 
     const token = jwt.sign(
       { 
@@ -258,7 +271,8 @@ router.post('/refresh', async (req, res) => {
 
     // Update refresh token in the database
     await db.none('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
-    await db.none('INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2)', [user.id, newRefreshToken]);
+    const refreshExpiresAt2 = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, newRefreshToken, refreshExpiresAt2]);
 
     const token = jwt.sign(
       { 
