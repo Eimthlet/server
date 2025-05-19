@@ -10,7 +10,7 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'userId is required' });
   }
   const db = new sqlite3.Database('quiz.db');
-  db.run('UPDATE users SET status = ? WHERE id = ?', ['disqualified', userId], function (err) {
+  db.run('UPDATE users SET status = $1 WHERE id = $2', ['disqualified', userId], function (err) {
     if (err) {
       res.status(500).json({ error: err.message });
     } else {

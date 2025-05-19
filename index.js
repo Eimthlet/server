@@ -509,7 +509,7 @@ app.post("/api/quiz/start", async (req, res) => {
     const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
     
     // Check if user has already played
-    const checkQuery = "SELECT COUNT(*) as count FROM progress WHERE user_id = ?";
+    const checkQuery = "SELECT COUNT(*) as count FROM progress WHERE user_id = $1";
     const hasPlayed = await new Promise((resolve, reject) => {
       db.get(checkQuery, [userId], (err, row) => {
         if (err) reject(err);

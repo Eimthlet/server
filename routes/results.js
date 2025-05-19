@@ -23,7 +23,7 @@ router.post('/', (req, res) => {
 
       // Check if user qualifies for next round
       db.get(
-        `SELECT min_score_to_qualify FROM rounds WHERE id = ?`,
+        `SELECT min_score_to_qualify FROM rounds WHERE id = $1`,
         [roundId],
         (err, round) => {
           if (err) {
@@ -50,7 +50,7 @@ router.get('/user/:userId/season/:seasonId', (req, res) => {
     `SELECT qr.*, r.round_number, r.min_score_to_qualify
      FROM quiz_results qr
      JOIN rounds r ON r.id = qr.round_id
-     WHERE qr.user_id = ? AND qr.season_id = ?
+     WHERE qr.user_id = $1 AND qr.season_id = $2
      ORDER BY r.round_number`,
     [userId, seasonId],
     (err, results) => {

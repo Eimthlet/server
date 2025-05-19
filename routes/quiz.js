@@ -37,7 +37,7 @@ router.post('/disqualify', verifyToken, (req, res) => {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
-  db.run('UPDATE users SET disqualified = 1 WHERE id = ?', [userId], (err) => {
+  db.run('UPDATE users SET disqualified = 1 WHERE id = $1', [userId], (err) => {
     if (err) {
       console.error('Error disqualifying user:', err);
       return res.status(500).json({ error: 'Could not disqualify user' });
