@@ -61,67 +61,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Admin authentication middleware
-function isAdmin(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return res.status(401).json({ 
-      error: 'Unauthorized', 
-      details: 'No authorization header provided' 
-    });
-  }
-
-  const tokenParts = authHeader.split(' ');
-  if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-    return res.status(401).json({ 
-      error: 'Invalid Authorization', 
-      details: 'Authorization header must be in format: Bearer <token>' 
-    });
-  }
-
-  const token = tokenParts[1];
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Check token expiration
-    const currentTime = Math.floor(Date.now() / 1000);
-    if (decoded.exp && decoded.exp < currentTime) {
-      return res.status(401).json({ 
-        error: 'Token Expired', 
-        details: 'Your authentication token has expired. Please log in again.' 
-      });
-    }
-
-    // Check admin status
-    if (!decoded.isAdmin) {
-      return res.status(403).json({ 
-        error: 'Forbidden', 
-        details: 'Admin access required. Your account does not have admin privileges.' 
-      });
-    }
-
-    // Attach decoded user info to request for potential further use
-    req.user = decoded;
-    next();
-  } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
-        error: 'Invalid Token', 
-        details: 'The provided authentication token is invalid.' 
-      });
-    }
-    
-    console.error('Admin middleware error:', error);
-    res.status(500).json({ 
-      error: 'Server Error', 
-      details: 'An unexpected error occurred during authentication.' 
-    });
-  }
-}
-
-// Authentication middleware moved to middleware/auth.js
+// Authentication middleware is now imported from './middleware/auth.js'
 
 /**
  * @swagger
@@ -340,55 +280,7 @@ app.get("/api/admin/insights-stats", isAdmin, async (req, res) => {
   }
 });
 
-// General authentication middleware
-function authenticateUser(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    console.log('Token verification failed: No token provided');
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  const tokenParts = authHeader.split(' ');
-  if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-    return res.status(401).json({ 
-      error: 'Invalid Authorization', 
-      details: 'Authorization header must be in format: Bearer <token>' 
-    });
-  }
-
-  const token = tokenParts[1];
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    
-    // Check token expiration
-    const currentTime = Math.floor(Date.now() / 1000);
-    if (decoded.exp && decoded.exp < currentTime) {
-      return res.status(401).json({ 
-        error: 'Token Expired', 
-        details: 'Your authentication token has expired. Please log in again.' 
-      });
-    }
-
-    // Attach decoded user info to request for potential further use
-    req.user = decoded;
-    next();
-  } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
-        error: 'Invalid Token', 
-        details: 'The provided authentication token is invalid.' 
-      });
-    }
-    
-    console.error('Authentication middleware error:', error);
-    res.status(500).json({ 
-      error: 'Server Error', 
-      details: 'An unexpected error occurred during authentication.' 
-    });
-  }
-}
+// authenticateUser is now imported from './middleware/auth.js'
 
 // Endpoint to get all questions
 app.get("/api/questions", authenticateUser, async (req, res) => {
