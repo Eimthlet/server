@@ -144,6 +144,7 @@ await db.none(
       token,
       refreshToken
     });
+    return;
   } catch (error) {
     console.error('Database error during registration:', error);
     
@@ -153,8 +154,8 @@ await db.none(
         return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
       return;
       } else if (error.constraint === 'users_email_key') {
-        return res.status(400).json({ error: 'Email already registered' });
-      return;
+        res.status(400).json({ error: 'Email already registered' });
+        return;
       }
     }
     
