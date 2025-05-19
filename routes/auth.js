@@ -108,41 +108,22 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
       }
     }
 
-    // Hash password and create user
+    // Hash password and store pending registration
     const hashedPassword = await bcrypt.hash(password, 10);
-    // Generate a default username if not provided
-    const defaultUsername = email.split('@')[0];
-    const finalUsername = username || defaultUsername;
-    const refreshToken = generateRefreshToken();
-
-    // Insert user with correct schema columns
-    const result = await db.one(
-      'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
-      [finalUsername, email, hashedPassword, email.endsWith('@admin.com') ? 'admin' : 'user']
+    // Generate unique tx_ref
+    const tx_ref = 'TX' + Date.now() + Math.floor(Math.random() * 1000000);
+    await db.none(
+      'INSERT INTO pending_registrations (tx_ref, username, email, password_hash, phone, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+      [tx_ref, username, email, hashedPassword, phone, amount]
     );
-    
-    // Store refresh token in separate table
-    const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-await db.none(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
-      [result.id, refreshToken, refreshExpiresAt]
-    );
-
-    const token = jwt.sign(
-      { 
-        id: result.id, 
-        email, 
-        isAdmin: email.endsWith('@admin.com'),
-        exp: Math.floor(Date.now() / 1000) + (60 * 60) // 1 hour
-      }, 
-      JWT_SECRET
-    );
-
-    console.log('User registered successfully:', email);
+    // Respond with tx_ref and PayChangu public key
     res.json({
-      user: { id: result.id, username: finalUsername, email },
-      token,
-      refreshToken
+      tx_ref,
+      public_key: process.env.PAYCHANGU_PUBLIC_KEY,
+      amount,
+      email,
+      phone,
+      message: 'Proceed to payment with this tx_ref.'
     });
     return;
   } catch (error) {
@@ -152,10 +133,8 @@ await db.none(
     if (error.code === '23505') { // Unique constraint violation
       if (error.constraint === 'users_username_key') {
         return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
-      return;
       } else if (error.constraint === 'users_email_key') {
-        res.status(400).json({ error: 'Email already registered' });
-        return;
+        return res.status(400).json({ error: 'Email already registered' });
       }
     }
     
