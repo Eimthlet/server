@@ -46,9 +46,16 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     const finalUsername = username || defaultUsername;
     const refreshToken = generateRefreshToken();
 
+    // Insert user with correct schema columns
     const result = await db.one(
-      'INSERT INTO users (username, email, password_hash, is_admin, refresh_token) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [finalUsername, email, hashedPassword, email.endsWith('@admin.com'), refreshToken]
+      'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
+      [finalUsername, email, hashedPassword, email.endsWith('@admin.com') ? 'admin' : 'user']
+    );
+    
+    // Store refresh token in separate table
+    await db.none(
+      'INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2)',
+      [result.id, refreshToken]
     );
 
     const token = jwt.sign(
@@ -69,9 +76,8 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     });
   } catch (error) {
     console.error('Database error during registration:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error', details: error.message });
   }
-
 });
 
 // Login endpoint
@@ -99,7 +105,7 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
     if (!isValidPassword) {
       console.log('Login failed: Invalid password', {
         email: email,
-        isAdmin: user.is_admin === 1,
+        isAdmin: user.role === 'admin',
         adminLoginAttempt: email.endsWith('@admin.com')
       });
       return res.status(401).json({ 
@@ -109,7 +115,7 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
     }
 
     // Additional check for admin authentication
-    if (email.endsWith('@admin.com') && user.is_admin !== 1) {
+    if (email.endsWith('@admin.com') && user.role !== 'admin') {
       console.log('Login failed: Non-admin user attempting admin login', {
         email: email,
         userId: user.id
@@ -119,14 +125,17 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
 
     const refreshToken = generateRefreshToken();
 
-    // Update user's refresh token in the database
-    await db.none('UPDATE users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);
+    // Store refresh token in separate table
+    // First delete any existing tokens for this user
+    await db.none('DELETE FROM refresh_tokens WHERE user_id = $1', [user.id]);
+    // Then insert the new token
+    await db.none('INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2)', [user.id, refreshToken]);
 
     const token = jwt.sign(
       { 
         id: user.id, 
         email: user.email, 
-        isAdmin: user.is_admin === 1,
+        isAdmin: user.role === 'admin',
         exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
       }, 
       JWT_SECRET
@@ -135,10 +144,10 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
     console.log('User logged in successfully', {
       email: email,
       userId: user.id,
-      isAdmin: user.is_admin === 1
+      isAdmin: user.role === 'admin'
     });
     res.json({
-      user: { id: user.id, username: user.username, email: user.email, role: user.is_admin === 1 ? 'admin' : 'user' },
+      user: { id: user.id, username: user.username, email: user.email, role: user.role },
       token,
       refreshToken
     });
@@ -157,21 +166,33 @@ router.post('/refresh', async (req, res) => {
   }
 
   try {
-    const user = await db.one('SELECT * FROM users WHERE refresh_token = $1', [refreshToken]);
-    if (!user) {
+    // Find the refresh token in the refresh_tokens table
+    const tokenRecord = await db.oneOrNone(
+      'SELECT rt.*, u.* FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id WHERE rt.token = $1',
+      [refreshToken]
+    );
+    
+    if (!tokenRecord) {
       return res.status(403).json({ error: 'Invalid refresh token' });
     }
 
+    const user = {
+      id: tokenRecord.user_id,
+      email: tokenRecord.email,
+      role: tokenRecord.role
+    };
+
     const newRefreshToken = generateRefreshToken();
 
-    // Update user's refresh token in the database
-    await db.none('UPDATE users SET refresh_token = $1 WHERE id = $2', [newRefreshToken, user.id]);
+    // Update refresh token in the database
+    await db.none('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+    await db.none('INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2)', [user.id, newRefreshToken]);
 
     const token = jwt.sign(
       { 
         id: user.id, 
         email: user.email, 
-        isAdmin: user.is_admin === 1,
+        isAdmin: user.role === 'admin',
         exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
       }, 
       JWT_SECRET
@@ -183,7 +204,7 @@ router.post('/refresh', async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating refresh token:', error);
-    res.status(500).json({ error: 'Could not update refresh token' });
+    res.status(500).json({ error: 'Could not update refresh token', details: error.message });
   }
 });
 
