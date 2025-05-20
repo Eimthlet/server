@@ -88,55 +88,6 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     res.status(500).json({ error: 'Registration failed. Please try again later.' });
     return;
   }
-
-  try {
-    // Check if user already exists (by email)
-    const userByEmail = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
-    if (userByEmail) {
-      console.log('Registration failed: Email already exists:', email);
-      return res.status(400).json({ error: 'Email already registered' });
-      return;
-    }
-    
-    // Check if username is already taken
-    if (username) {
-      const userByUsername = await db.oneOrNone('SELECT * FROM users WHERE username = $1', [username]);
-      if (userByUsername) {
-        console.log('Registration failed: Username already exists:', username);
-        return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
-      return;
-      }
-    }
-
-    // Hash password and store pending registration
-    const hashedPassword = await bcrypt.hash(password, 10);
-    // Generate unique tx_ref
-    const tx_ref = 'TX' + Date.now() + Math.floor(Math.random() * 1000000);
-    await db.none(
-      'INSERT INTO pending_registrations (tx_ref, username, email, password_hash, phone, amount) VALUES ($1, $2, $3, $4, $5, $6)',
-      [tx_ref, username, email, hashedPassword, phone, amount]
-    );
-    // Respond with tx_ref and PayChangu public key
-    res.json({
-      tx_ref,
-      public_key: process.env.PAYCHANGU_PUBLIC_KEY,
-      amount,
-      email,
-      phone,
-      message: 'Proceed to payment with this tx_ref.'
-    });
-    return;
-  } catch (error) {
-    console.error('Database error during registration:', error);
-    
-    // Handle specific database errors with user-friendly messages
-    if (error.code === '23505') { // Unique constraint violation
-      if (error.constraint === 'users_username_key') {
-        return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
-      } else if (error.constraint === 'users_email_key') {
-        return res.status(400).json({ error: 'Email already registered' });
-      }
-    }
     
     // Generic error for other cases
     res.status(500).json({ error: 'Registration failed. Please try again later.' });
