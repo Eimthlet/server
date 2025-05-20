@@ -79,12 +79,13 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
       message: 'Proceed to payment with this tx_ref.'
     });
   } catch (error) {
+    console.error('Registration error:', error);
     if (error.code === '23505') {
       if (error.constraint === 'pending_registrations_tx_ref_key') {
         return res.status(400).json({ error: 'Duplicate transaction reference. Please try again.' });
       }
     }
-    res.status(500).json({ error: 'Registration failed. Please try again later.' });
+    res.status(500).json({ error: 'Registration failed. Please try again.', details: error.message });
   }
 });
 

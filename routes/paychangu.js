@@ -17,7 +17,7 @@ router.post('/paychangu-callback', async (req, res) => {
     const verifyUrl = `https://api.paychangu.com/v1/transaction/verify/${tx_ref}`;
     const verifyResponse = await fetch(verifyUrl, {
       headers: {
-        'Authorization': `Bearer ${process.env.PAYCHANGU_API_KEY}`,
+        'Authorization': `Bearer ${process.env.PAYCHANGU_SECRET_KEY}`,
         'Content-Type': 'application/json'
       }
     });
