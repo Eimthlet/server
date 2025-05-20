@@ -12,11 +12,13 @@ import authRoutes from './routes/auth.js';
 import paychanguRoutes from './routes/paychangu.js';
 import adminRoutes from './routes/admin.js';
 import adminQuizRoutes from './routes/admin-quiz.js';
+import adminSeasonsRoutes from './routes/admin-seasons.js';
 import resultsRoutes from "./routes/results.js";
 import questionsRoutes from "./routes/questions.js";
 import quizRoutes from "./routes/quiz.js";
 import progressRoutes from "./routes/progress.js";
 import leaderboardRoutes from "./routes/leaderboard.js";
+import qualificationRoutes from "./routes/qualification.js";
 
 // Middleware
 import { isAdmin, authenticateUser } from './middleware/auth.js';
@@ -88,11 +90,13 @@ app.use('/', paychanguRoutes);
 app.use('/api/auth', paychanguRoutes);
 app.use('/api/admin', isAdmin, adminRoutes);
 app.use('/api/admin/quiz', isAdmin, adminQuizRoutes);
+app.use('/api/admin/seasons', isAdmin, adminSeasonsRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/results', resultsRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/results/leaderboard', leaderboardRoutes);
+app.use('/api/qualification', qualificationRoutes);
 
 // 404 Handler for API routes
 app.use('/api/*', (req, res) => {

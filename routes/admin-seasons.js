@@ -1,0 +1,295 @@
+import express from 'express';
+import { isAdmin } from '../middleware/auth.js';
+import db from '../config/database.js';
+
+const router = express.Router();
+
+// Get all seasons
+router.get('/', isAdmin, async (req, res) => {
+  try {
+    const seasons = await db.any(`
+      SELECT 
+        s.*,
+        COUNT(DISTINCT q.id) as question_count,
+        COUNT(DISTINCT uqa.id) as attempts_count,
+        COUNT(DISTINCT CASE WHEN uqa.qualifies_for_next_round = true THEN uqa.user_id END) as qualified_users_count
+      FROM 
+        seasons s
+      LEFT JOIN 
+        questions q ON s.id = q.season_id
+      LEFT JOIN 
+        user_quiz_attempts uqa ON s.id = uqa.season_id
+      GROUP BY 
+        s.id
+      ORDER BY 
+        s.created_at DESC
+    `);
+
+    res.json(seasons);
+  } catch (error) {
+    console.error('Error fetching seasons:', error);
+    res.status(500).json({ message: 'Server error while fetching seasons' });
+  }
+});
+
+// Get a specific season by ID
+router.get('/:id', isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const season = await db.oneOrNone(`
+      SELECT 
+        s.*,
+        COUNT(DISTINCT q.id) as question_count,
+        COUNT(DISTINCT uqa.id) as attempts_count,
+        COUNT(DISTINCT CASE WHEN uqa.qualifies_for_next_round = true THEN uqa.user_id END) as qualified_users_count
+      FROM 
+        seasons s
+      LEFT JOIN 
+        questions q ON s.id = q.season_id
+      LEFT JOIN 
+        user_quiz_attempts uqa ON s.id = uqa.season_id
+      WHERE 
+        s.id = $1
+      GROUP BY 
+        s.id
+    `, [id]);
+    
+    if (!season) {
+      return res.status(404).json({ message: 'Season not found' });
+    }
+    
+    res.json(season);
+  } catch (error) {
+    console.error('Error fetching season:', error);
+    res.status(500).json({ message: 'Server error while fetching season' });
+  }
+});
+
+// Create a new season
+router.post('/', isAdmin, async (req, res) => {
+  try {
+    const { 
+      name, 
+      description, 
+      start_date, 
+      end_date, 
+      is_active, 
+      is_qualification_round,
+      minimum_score_percentage 
+    } = req.body;
+    
+    // Validate required fields
+    if (!name || !start_date || !end_date) {
+      return res.status(400).json({ message: 'Name, start date, and end date are required' });
+    }
+    
+    // If setting this season as active, deactivate all other seasons
+    if (is_active) {
+      await db.none(`UPDATE seasons SET is_active = false WHERE is_active = true`);
+    }
+    
+    // Create the new season
+    const newSeason = await db.one(`
+      INSERT INTO seasons 
+        (name, description, start_date, end_date, is_active, is_qualification_round, minimum_score_percentage)
+      VALUES 
+        ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [
+      name, 
+      description || null, 
+      start_date, 
+      end_date, 
+      is_active || false, 
+      is_qualification_round || false,
+      minimum_score_percentage || 50
+    ]);
+    
+    res.status(201).json(newSeason);
+  } catch (error) {
+    console.error('Error creating season:', error);
+    res.status(500).json({ message: 'Server error while creating season' });
+  }
+});
+
+// Update a season
+router.put('/:id', isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      name, 
+      description, 
+      start_date, 
+      end_date, 
+      is_active, 
+      is_qualification_round,
+      minimum_score_percentage 
+    } = req.body;
+    
+    // Check if season exists
+    const existingSeason = await db.oneOrNone('SELECT * FROM seasons WHERE id = $1', [id]);
+    if (!existingSeason) {
+      return res.status(404).json({ message: 'Season not found' });
+    }
+    
+    // If setting this season as active, deactivate all other seasons
+    if (is_active) {
+      await db.none(`UPDATE seasons SET is_active = false WHERE id != $1`, [id]);
+    }
+    
+    // Update the season
+    const updatedSeason = await db.one(`
+      UPDATE seasons 
+      SET 
+        name = COALESCE($1, name),
+        description = COALESCE($2, description),
+        start_date = COALESCE($3, start_date),
+        end_date = COALESCE($4, end_date),
+        is_active = COALESCE($5, is_active),
+        is_qualification_round = COALESCE($6, is_qualification_round),
+        minimum_score_percentage = COALESCE($7, minimum_score_percentage),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $8
+      RETURNING *
+    `, [
+      name, 
+      description, 
+      start_date, 
+      end_date, 
+      is_active, 
+      is_qualification_round,
+      minimum_score_percentage,
+      id
+    ]);
+    
+    res.json(updatedSeason);
+  } catch (error) {
+    console.error('Error updating season:', error);
+    res.status(500).json({ message: 'Server error while updating season' });
+  }
+});
+
+// Delete a season
+router.delete('/:id', isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if season exists
+    const existingSeason = await db.oneOrNone('SELECT * FROM seasons WHERE id = $1', [id]);
+    if (!existingSeason) {
+      return res.status(404).json({ message: 'Season not found' });
+    }
+    
+    // Check if there are any questions or attempts associated with this season
+    const associations = await db.one(`
+      SELECT 
+        (SELECT COUNT(*) FROM questions WHERE season_id = $1) as question_count,
+        (SELECT COUNT(*) FROM user_quiz_attempts WHERE season_id = $1) as attempt_count
+    `, [id]);
+    
+    if (associations.question_count > 0 || associations.attempt_count > 0) {
+      return res.status(400).json({ 
+        message: 'Cannot delete season with associated questions or attempts',
+        associations
+      });
+    }
+    
+    // Delete the season
+    await db.none('DELETE FROM seasons WHERE id = $1', [id]);
+    
+    res.json({ message: 'Season deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting season:', error);
+    res.status(500).json({ message: 'Server error while deleting season' });
+  }
+});
+
+// Get qualified users for a specific season
+router.get('/:id/qualified-users', isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const qualifiedUsers = await db.any(`
+      SELECT 
+        u.id,
+        u.username,
+        u.email,
+        uqa.score,
+        uqa.percentage_score,
+        uqa.completed_at
+      FROM 
+        users u
+      JOIN 
+        user_quiz_attempts uqa ON u.id = uqa.user_id
+      WHERE 
+        uqa.season_id = $1 AND
+        uqa.qualifies_for_next_round = true
+      ORDER BY 
+        uqa.score DESC, uqa.completed_at ASC
+    `, [id]);
+    
+    res.json(qualifiedUsers);
+  } catch (error) {
+    console.error('Error fetching qualified users:', error);
+    res.status(500).json({ message: 'Server error while fetching qualified users' });
+  }
+});
+
+// Add questions to a season
+router.post('/:id/questions', isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { questions } = req.body;
+    
+    // Check if season exists
+    const existingSeason = await db.oneOrNone('SELECT * FROM seasons WHERE id = $1', [id]);
+    if (!existingSeason) {
+      return res.status(404).json({ message: 'Season not found' });
+    }
+    
+    // Validate questions array
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ message: 'Questions array is required' });
+    }
+    
+    // Add questions to the season
+    const addedQuestions = [];
+    for (const question of questions) {
+      const { question_text, options, correct_answer, category, difficulty } = question;
+      
+      // Validate required fields
+      if (!question_text || !options || !correct_answer) {
+        continue; // Skip invalid questions
+      }
+      
+      // Insert the question
+      const newQuestion = await db.one(`
+        INSERT INTO questions 
+          (question, options, correct_answer, category, difficulty, season_id)
+        VALUES 
+          ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `, [
+        question_text,
+        options,
+        correct_answer,
+        category || 'General',
+        difficulty || 'Medium',
+        id
+      ]);
+      
+      addedQuestions.push(newQuestion);
+    }
+    
+    res.status(201).json({
+      message: `${addedQuestions.length} questions added to season successfully`,
+      questions: addedQuestions
+    });
+  } catch (error) {
+    console.error('Error adding questions to season:', error);
+    res.status(500).json({ message: 'Server error while adding questions to season' });
+  }
+});
+
+export default router;

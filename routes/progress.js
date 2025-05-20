@@ -42,10 +42,16 @@ router.post('/', authenticateUser, async (req, res) => {
         );
       }
 
+      // Calculate if user qualifies for next round (50% minimum score)
+      const qualifiesForNextRound = score >= Math.ceil(total / 2);
+      
       return res.json({
         message: 'Quiz completed successfully',
         score,
-        total
+        total,
+        qualifiesForNextRound,
+        minimumScoreRequired: Math.ceil(total / 2),
+        percentageScore: Math.round((score / total) * 100)
       });
     } catch (error) {
       console.error('Error recording quiz completion:', error);
@@ -148,12 +154,17 @@ router.post('/', authenticateUser, async (req, res) => {
 
     // Check if all questions have been answered
     if (answeredCount >= totalQuestions) {
-      // Update the attempt as completed
+      // Calculate if user qualifies for next round (50% minimum score)
+      const qualifiesForNextRound = correctCount >= Math.ceil(totalQuestions / 2);
+      const percentageScore = Math.round((correctCount / totalQuestions) * 100);
+      
+      // Update the attempt as completed with qualification status
       await db.none(
         `UPDATE user_quiz_attempts 
-         SET completed = true, score = $1, completed_at = CURRENT_TIMESTAMP 
-         WHERE id = $2`,
-        [correctCount, attempt.id]
+         SET completed = true, score = $1, completed_at = CURRENT_TIMESTAMP,
+         qualifies_for_next_round = $2, percentage_score = $3
+         WHERE id = $4`,
+        [correctCount, qualifiesForNextRound, percentageScore, attempt.id]
       );
 
       // Return the final result
@@ -163,6 +174,9 @@ router.post('/', authenticateUser, async (req, res) => {
         completed: true,
         score: correctCount,
         totalQuestions,
+        qualifiesForNextRound,
+        minimumScoreRequired: Math.ceil(totalQuestions / 2),
+        percentageScore,
         progress
       });
     }
