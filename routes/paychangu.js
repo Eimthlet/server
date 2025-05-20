@@ -28,7 +28,7 @@ router.all('/paychangu-callback', async (req, res) => {
       const verifyResult = await verifyResponse.json();
       console.log('PayChangu verifyResult:', verifyResult);
       // Check the correct field for payment success
-      if (!verifyResponse.ok || !verifyResult.data || verifyResult.data.status !== 'successful') {
+      if (!verifyResponse.ok || !verifyResult.data || verifyResult.data.status !== 'success') {
         return res.status(402).json({ error: 'Payment not verified', details: verifyResult });
       }
     } catch (verifyError) {
