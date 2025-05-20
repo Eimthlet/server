@@ -10,22 +10,26 @@ import db from '../config/database.js';
 const router = express.Router();
 const DISQUALIFIED_USERS_PATH = path.join(process.cwd(), 'disqualified_users.json');
 
-// Get all users with their latest quiz results
+// Get all users with their quiz attempts and scores
 router.get('/users', isAdmin, async (req, res) => {
   const query = `
     SELECT 
       u.id,
+      u.username,
       u.email,
       u.created_at,
-      qr.score,
-      qr.completed_at
+      u.is_disqualified,
+      uqa.id as attempt_id,
+      uqa.score,
+      uqa.completed,
+      uqa.started_at,
+      uqa.completed_at,
+      (SELECT COUNT(*) FROM quiz_progress WHERE attempt_id = uqa.id) as questions_answered,
+      (SELECT COUNT(*) FROM questions) as total_questions
     FROM users u
-    LEFT JOIN quiz_results qr ON u.id = qr.user_id
-    WHERE qr.id = (
-      SELECT MAX(id) FROM quiz_results WHERE user_id = u.id
-    )
-    ORDER BY qr.score DESC NULLS LAST,
-             qr.completed_at ASC NULLS LAST;
+    LEFT JOIN user_quiz_attempts uqa ON u.id = uqa.user_id
+    ORDER BY uqa.score DESC NULLS LAST,
+             uqa.completed_at ASC NULLS LAST;
   `;
 
   try {
