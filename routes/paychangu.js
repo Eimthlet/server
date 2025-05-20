@@ -5,9 +5,9 @@ import fetch from 'node-fetch';
 
 const router = express.Router();
 
-// POST /api/auth/paychangu-callback
-router.post('/paychangu-callback', async (req, res) => {
-  const { tx_ref } = req.body;
+// Accept both GET and POST for PayChangu callback
+router.all('/paychangu-callback', async (req, res) => {
+  const tx_ref = req.body.tx_ref || req.query.tx_ref;
   if (!tx_ref) {
     return res.status(400).json({ error: 'Missing tx_ref' });
   }
@@ -22,7 +22,9 @@ router.post('/paychangu-callback', async (req, res) => {
       }
     });
     const verifyResult = await verifyResponse.json();
-    if (!verifyResponse.ok || !verifyResult.status || verifyResult.status !== 'success') {
+    console.log('PayChangu verifyResult:', verifyResult);
+    // Check the correct field for payment success
+    if (!verifyResponse.ok || !verifyResult.data || verifyResult.data.status !== 'successful') {
       return res.status(402).json({ error: 'Payment not verified', details: verifyResult });
     }
 
