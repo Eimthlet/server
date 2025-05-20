@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PayChangu Test</title>
+  <script src="https://in.paychangu.com/js/popup.js"></script>
+</head>
+<body>
+  <button onclick="pay()">Pay</button>
+  <script>
+    function pay() {
+      window.PaychanguCheckout({
+        public_key: "PUB-TEST-DZpxF2GNMJkv0n76gcLmC4nXtNpk66za",
+        tx_ref: "TX1234567890",
+        amount: 2000,
+        currency: "MWK",
+        callback_url: "https://your-callback-url.com",
+        customer: {
+          email: "test@example.com",
+          first_name: "Test",
+          last_name: ""
+        },
+        customization: {
+          title: "Quiz Registration Payment",
+          description: "Registration fee for quiz platform"
+        },
+        meta: {
+          uuid: "TX1234567890"
+        }
+      });
+    }
+  </script>
+</body>
+</html>
