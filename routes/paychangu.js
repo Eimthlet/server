@@ -85,21 +85,23 @@ router.all('/paychangu-callback', async (req, res) => {
       const redirectUrl = `${frontendUrl}/login?payment=success&email=${encodeURIComponent(pending.email)}`;
       console.log('Redirecting to:', redirectUrl);
       
-      // Send HTML with auto-redirect script
+      // Send HTML with immediate redirect script
+      res.setHeader('Content-Type', 'text/html');
       res.send(`
         <!DOCTYPE html>
         <html>
           <head>
             <title>Registration Successful</title>
             <meta http-equiv="refresh" content="0;url=${redirectUrl}" />
+            <script type="text/javascript">
+              // Immediate redirect
+              window.location.replace("${redirectUrl}");
+            </script>
           </head>
-          <body>
+          <body onload="window.location.href='${redirectUrl}'">
             <h1>Registration Successful!</h1>
             <p>You are being redirected to the login page...</p>
             <p>If you are not redirected automatically, <a href="${redirectUrl}">click here</a>.</p>
-            <script>
-              window.location.href = "${redirectUrl}";
-            </script>
           </body>
         </html>
       `);
