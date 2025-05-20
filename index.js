@@ -80,6 +80,8 @@ app.get('/api/health', (req, res) => {
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
+// Mount PayChangu routes at both root and API level to ensure callbacks work
+app.use('/', paychanguRoutes);
 app.use('/api/auth', paychanguRoutes);
 app.use('/api/admin', isAdmin, adminRoutes);
 app.use('/api/questions', questionsRoutes);
