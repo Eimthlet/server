@@ -74,12 +74,15 @@ router.all('/paychangu-callback', async (req, res) => {
         role: 'user'
       });
       
+      // Create the user and get the ID in a single variable that's accessible throughout the outer try block
+      let userId;
       try {
         const result = await db.one(
           'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
           [pending.username, pending.email, pending.password_hash, 'user']
         );
-        console.log('User created successfully with ID:', result.id);
+        userId = result.id;
+        console.log('User created successfully with ID:', userId);
       } catch (dbError) {
         console.error('Database error during user creation:', dbError);
         console.error('SQL error details:', dbError.message, dbError.code, dbError.constraint);
@@ -92,7 +95,7 @@ router.all('/paychangu-callback', async (req, res) => {
       // 6. Generate JWT token
       const token = jwt.sign(
         {
-          id: result.id,
+          id: userId,
           email: pending.email,
           isAdmin: false,
           exp: Math.floor(Date.now() / 1000) + (60 * 60)
