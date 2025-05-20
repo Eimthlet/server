@@ -14,18 +14,26 @@ router.all('/paychangu-callback', async (req, res) => {
 
   try {
     // 1. Verify payment with PayChangu
-    const verifyUrl = `https://api.paychangu.com/v1/transaction/verify/${tx_ref}`;
-    const verifyResponse = await fetch(verifyUrl, {
-      headers: {
-        'Authorization': `Bearer ${process.env.PAYCHANGU_SECRET_KEY}`,
-        'Content-Type': 'application/json'
+    // Use the correct test API endpoint
+    const verifyUrl = `https://api.paychangu.com/v1/transactions/verify/${tx_ref}`;
+    console.log('Verifying payment at URL:', verifyUrl);
+    
+    try {
+      const verifyResponse = await fetch(verifyUrl, {
+        headers: {
+          'Authorization': `Bearer ${process.env.PAYCHANGU_SECRET_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const verifyResult = await verifyResponse.json();
+      console.log('PayChangu verifyResult:', verifyResult);
+      // Check the correct field for payment success
+      if (!verifyResponse.ok || !verifyResult.data || verifyResult.data.status !== 'successful') {
+        return res.status(402).json({ error: 'Payment not verified', details: verifyResult });
       }
-    });
-    const verifyResult = await verifyResponse.json();
-    console.log('PayChangu verifyResult:', verifyResult);
-    // Check the correct field for payment success
-    if (!verifyResponse.ok || !verifyResult.data || verifyResult.data.status !== 'successful') {
-      return res.status(402).json({ error: 'Payment not verified', details: verifyResult });
+    } catch (verifyError) {
+      console.error('Error verifying payment with PayChangu:', verifyError);
+      return res.status(500).json({ error: 'Failed to verify payment with PayChangu', details: verifyError.message });
     }
 
     // 2. Find the pending registration
