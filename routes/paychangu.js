@@ -14,8 +14,8 @@ router.all('/paychangu-callback', async (req, res) => {
 
   try {
     // 1. Verify payment with PayChangu
-    // Use the correct test API endpoint
-    const verifyUrl = `https://api.paychangu.com/v1/transactions/verify/${tx_ref}`;
+    // Use the correct API endpoint from PayChangu documentation
+    const verifyUrl = `https://api.paychangu.com/verify-payment/${tx_ref}`;
     console.log('Verifying payment at URL:', verifyUrl);
     
     try {
