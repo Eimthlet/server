@@ -7,9 +7,55 @@ const router = express.Router();
 // Start or continue a quiz attempt
 router.post('/', authenticateUser, async (req, res) => {
   const userId = req.user.id;
-  const { questionId, answer } = req.body;
+  // Handle both formats: {questionId, answer} or {userId, score, total}
+  const { questionId, answer, score, total } = req.body;
+  
+  console.log('Progress POST request received:', {
+    userId,
+    requestBody: req.body,
+    questionId,
+    answer,
+    score,
+    total
+  });
 
+  // Handle quiz completion (from App.tsx)
+  if (score !== undefined && total !== undefined) {
+    try {
+      // Check if the user already has an attempt
+      let attempt = await db.oneOrNone(
+        'SELECT * FROM user_quiz_attempts WHERE user_id = $1',
+        [userId]
+      );
+
+      if (!attempt) {
+        // Create a new attempt if none exists
+        attempt = await db.one(
+          'INSERT INTO user_quiz_attempts (user_id, score, completed, completed_at) VALUES ($1, $2, true, CURRENT_TIMESTAMP) RETURNING *',
+          [userId, score]
+        );
+      } else {
+        // Update existing attempt
+        await db.none(
+          'UPDATE user_quiz_attempts SET score = $1, completed = true, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [score, attempt.id]
+        );
+      }
+
+      return res.json({
+        message: 'Quiz completed successfully',
+        score,
+        total
+      });
+    } catch (error) {
+      console.error('Error recording quiz completion:', error);
+      return res.status(500).json({ error: 'Could not record quiz completion' });
+    }
+  }
+
+  // Handle individual question answer (original flow)
   if (!questionId) {
+    console.log('Error: Missing questionId in request');
     return res.status(400).json({ error: 'Question ID is required' });
   }
 
