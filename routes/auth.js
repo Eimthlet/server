@@ -156,6 +156,29 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
       userId: user.id,
       isAdmin: user.role === 'admin'
     });
+    
+    // Set HTTP-only cookies for both tokens
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // Set access token cookie
+    res.cookie('accessToken', token, {
+      httpOnly: true,
+      secure: isProduction, // Only use secure in production (requires HTTPS)
+      sameSite: isProduction ? 'none' : 'lax', // 'none' allows cross-site requests with secure, 'lax' is more restrictive but works in development
+      maxAge: 60 * 60 * 1000, // 1 hour in milliseconds
+      path: '/' // Cookie accessible from all paths
+    });
+    
+    // Set refresh token cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+      path: '/'
+    });
+    
+    // Also send tokens in the response body for clients that prefer that approach
     res.json({
       user: { id: user.id, username: user.username, email: user.email, role: user.role },
       token,
@@ -209,6 +232,28 @@ await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($
       JWT_SECRET
     );
 
+    // Set HTTP-only cookies for both tokens, just like in the login endpoint
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // Set access token cookie
+    res.cookie('accessToken', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 60 * 60 * 1000, // 1 hour
+      path: '/'
+    });
+    
+    // Set refresh token cookie
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/'
+    });
+    
+    // Also send tokens in the response body
     res.json({
       token,
       refreshToken: newRefreshToken

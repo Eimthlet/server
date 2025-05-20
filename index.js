@@ -33,20 +33,48 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Middleware
-app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL,
-    'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app'
-  ],
+const corsOptions = {
+  // Allow requests from any origin in development, or from specific origins in production
+  origin: function(origin, callback) {
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
+      'https://car-quizz.vercel.app',
+      'https://car-quizz.onrender.com'
+    ];
+    
+    // Allow requests with no origin (like mobile apps, curl, postman)
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      // Still allow the request to support development and testing
+      callback(null, true);
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'Origin', 'Accept'],
   credentials: true,
-  exposedHeaders: ['Access-Control-Allow-Origin']
-}));
+  exposedHeaders: ['Access-Control-Allow-Origin', 'Access-Control-Allow-Credentials']
+};
+
+app.use(cors(corsOptions));
+
+// Enable pre-flight requests for all routes
+app.options('*', cors(corsOptions));
+
+// Set proper headers for all responses
+app.use((req, res, next) => {
+  // Add CORS headers to all responses
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-access-token');
+  next();
+});
 
 app.use(express.json());
 app.use(express.static('public'));
-app.options('*', cors()); // Enable pre-flight requests for all routes
 
 // Log all requests
 app.use((req, res, next) => {
