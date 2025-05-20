@@ -27,8 +27,15 @@ router.all('/paychangu-callback', async (req, res) => {
       });
       const verifyResult = await verifyResponse.json();
       console.log('PayChangu verifyResult:', verifyResult);
-      // Check the correct field for payment success
-      if (!verifyResponse.ok || !verifyResult.data || verifyResult.data.status !== 'success') {
+      console.log('Payment status check:', {
+        responseOk: verifyResponse.ok,
+        hasData: !!verifyResult.data,
+        status: verifyResult.data?.status,
+        expectedStatus: 'success or successful',
+        statusMatch: verifyResult.data?.status === 'success' || verifyResult.data?.status === 'successful'
+      });
+      // Check the correct field for payment success - accept both 'success' and 'successful'
+      if (!verifyResponse.ok || !verifyResult.data || (verifyResult.data.status !== 'success' && verifyResult.data.status !== 'successful')) {
         return res.status(402).json({ error: 'Payment not verified', details: verifyResult });
       }
     } catch (verifyError) {
@@ -60,11 +67,24 @@ router.all('/paychangu-callback', async (req, res) => {
     // 4. Create the user
     console.log('Creating user:', pending.username, pending.email);
     try {
-      const result = await db.one(
-        'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
-        [pending.username, pending.email, pending.password_hash, 'user']
-      );
-      console.log('User created successfully with ID:', result.id);
+      console.log('User creation data:', {
+        username: pending.username,
+        email: pending.email,
+        passwordHashLength: pending.password_hash?.length || 0,
+        role: 'user'
+      });
+      
+      try {
+        const result = await db.one(
+          'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
+          [pending.username, pending.email, pending.password_hash, 'user']
+        );
+        console.log('User created successfully with ID:', result.id);
+      } catch (dbError) {
+        console.error('Database error during user creation:', dbError);
+        console.error('SQL error details:', dbError.message, dbError.code, dbError.constraint);
+        throw dbError; // Re-throw to be caught by the outer try-catch
+      }
 
       // 5. Clean up pending registration
       await db.none('DELETE FROM pending_registrations WHERE tx_ref = $1', [tx_ref]);
