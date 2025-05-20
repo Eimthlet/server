@@ -82,16 +82,9 @@ router.post(['/register', '/api/auth/register'], async (req, res) => {
     if (error.code === '23505') {
       if (error.constraint === 'pending_registrations_tx_ref_key') {
         return res.status(400).json({ error: 'Duplicate transaction reference. Please try again.' });
-      return;
       }
     }
     res.status(500).json({ error: 'Registration failed. Please try again later.' });
-    return;
-  }
-    
-    // Generic error for other cases
-    res.status(500).json({ error: 'Registration failed. Please try again later.' });
-    return;
   }
 });
 
