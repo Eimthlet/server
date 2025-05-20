@@ -80,19 +80,29 @@ router.all('/paychangu-callback', async (req, res) => {
         process.env.JWT_SECRET
       );
 
-      // Instead of JSON response, redirect to login page
+      // Use HTML redirect instead of HTTP redirect for cross-domain scenarios
       const frontendUrl = process.env.FRONTEND_URL || 'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app';
       const redirectUrl = `${frontendUrl}/login?payment=success&email=${encodeURIComponent(pending.email)}`;
       console.log('Redirecting to:', redirectUrl);
       
-      // Send both JSON response and redirect header
-      res.set('Location', redirectUrl);
-      res.status(302).json({
-        user: { id: result.id, username: pending.username, email: pending.email, role: 'user' },
-        token,
-        message: 'Registration complete and payment verified.',
-        redirect: redirectUrl
-      });
+      // Send HTML with auto-redirect script
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Registration Successful</title>
+            <meta http-equiv="refresh" content="0;url=${redirectUrl}" />
+          </head>
+          <body>
+            <h1>Registration Successful!</h1>
+            <p>You are being redirected to the login page...</p>
+            <p>If you are not redirected automatically, <a href="${redirectUrl}">click here</a>.</p>
+            <script>
+              window.location.href = "${redirectUrl}";
+            </script>
+          </body>
+        </html>
+      `);
     } catch (dbError) {
       console.error('Database error creating user:', dbError);
       return res.status(500).json({ error: 'Failed to create user', details: dbError.message });
