@@ -7,7 +7,7 @@ const router = express.Router();
 const db = new sqlite3.Database(path.join(process.cwd(), 'quiz.db'));
 
 // Get all seasons
-router.get('/', isAdmin, (req, res) => {
+router.get('/seasons', isAdmin, (req, res) => {
   const query = `
     SELECT 
       s.*,
@@ -86,7 +86,7 @@ router.get('/:id', isAdmin, (req, res) => {
 });
 
 // Create new season
-router.post('/', isAdmin, (req, res) => {
+router.post('/seasons', isAdmin, async (req, res) => {
   const {
     name,
     description,
@@ -156,7 +156,7 @@ router.post('/', isAdmin, (req, res) => {
 });
 
 // Update season
-router.put('/:id', isAdmin, (req, res) => {
+router.put('/seasons/:id', isAdmin, async (req, res) => {
   const { id } = req.params;
   const {
     name,
@@ -236,7 +236,7 @@ router.put('/:id', isAdmin, (req, res) => {
 });
 
 // Delete season
-router.delete('/:id', isAdmin, (req, res) => {
+router.delete('/seasons/:id', isAdmin, async (req, res) => {
   const { id } = req.params;
 
   db.run('DELETE FROM seasons WHERE id = ?', [id], function(err) {
@@ -252,7 +252,7 @@ router.delete('/:id', isAdmin, (req, res) => {
 });
 
 // Get questions for a season
-router.get('/:id/questions', isAdmin, (req, res) => {
+router.get('/seasons/:id/questions', isAdmin, async (req, res) => {
   const { id } = req.params;
   const query = `
     SELECT q.*
@@ -272,7 +272,7 @@ router.get('/:id/questions', isAdmin, (req, res) => {
 });
 
 // Add questions to a season
-router.post('/:id/questions', isAdmin, (req, res) => {
+router.post('/seasons/:id/questions', isAdmin, async (req, res) => {
   const { id } = req.params;
   const { questions } = req.body;
 
@@ -313,7 +313,7 @@ router.post('/:id/questions', isAdmin, (req, res) => {
 });
 
 // Remove a question from a season
-router.delete('/:seasonId/questions/:questionId', isAdmin, (req, res) => {
+router.delete('/seasons/:seasonId/questions/:questionId', isAdmin, async (req, res) => {
   const { seasonId, questionId } = req.params;
 
   const query = 'DELETE FROM season_questions WHERE season_id = ? AND question_id = ?';
@@ -331,7 +331,7 @@ router.delete('/:seasonId/questions/:questionId', isAdmin, (req, res) => {
 });
 
 // Get qualified users for a season
-router.get('/:id/qualified-users', isAdmin, (req, res) => {
+router.get('/seasons/:id/qualified-users', isAdmin, async (req, res) => {
   const { id } = req.params;
   const query = `
     SELECT 

@@ -34,7 +34,6 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Middleware
 const corsOptions = {
-  // Allow requests from any origin in development, or from specific origins in production
   origin: function(origin, callback) {
     const allowedOrigins = [
       process.env.FRONTEND_URL,
@@ -43,19 +42,20 @@ const corsOptions = {
       'https://car-quizz.onrender.com'
     ];
     
-    // Allow requests with no origin (like mobile apps, curl, postman)
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, {
+        origin: true,
+        credentials: true
+      });
     } else {
       console.log('CORS blocked origin:', origin);
-      // Still allow the request to support development and testing
-      callback(null, true);
+      callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'Origin', 'Accept'],
   credentials: true,
-  exposedHeaders: ['Access-Control-Allow-Origin', 'Access-Control-Allow-Credentials']
+  exposedHeaders: ['X-XSRF-TOKEN'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'Origin', 'Accept']
 };
 
 app.use(cors(corsOptions));
