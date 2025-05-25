@@ -239,7 +239,8 @@ await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($
     res.cookie('accessToken', token, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
+      sameSite: 'lax',
+      partitioned: true,
       maxAge: 60 * 60 * 1000, // 1 hour
       path: '/'
     });
@@ -248,7 +249,8 @@ await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($
     res.cookie('refreshToken', newRefreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
+      sameSite: 'lax',
+      partitioned: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       path: '/'
     });
