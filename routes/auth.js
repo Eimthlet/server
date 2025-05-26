@@ -218,9 +218,9 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     const cookieOptions = {
       httpOnly: true,
       secure: true, // Always use secure cookies
-      sameSite: 'none', // Always use sameSite=none for cross-site requests
-      path: '/'
-      // Removed domain restriction to avoid cookie rejection
+      sameSite: 'None', // Use capital N for SameSite=None
+      path: '/',
+      domain: '.onrender.com' // Set domain for Render
     };
     
     // Add the Partitioned attribute as a string in the header directly
@@ -405,9 +405,9 @@ router.post(['/logout', '/api/auth/logout'], asyncHandler(async (req, res) => {
   const cookieOptions = {
     httpOnly: true,
     secure: true, // Always use secure cookies
-    sameSite: 'none', // Always use sameSite=none for cross-site requests
+    sameSite: 'None', // Use capital N for SameSite=None
     path: '/',
-    domain: process.env.COOKIE_DOMAIN || undefined
+    domain: '.onrender.com' // Set domain for Render
   };
   
   res.clearCookie('accessToken', cookieOptions);
