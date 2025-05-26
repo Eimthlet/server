@@ -50,7 +50,7 @@ router.get('/', authenticateUser, async (req, res) => {
     // First check if there's an active season
     console.log('Checking for active seasons');
     const activeSeason = await db.oneOrNone(`
-      SELECT id, name, is_qualification_round, minimum_score_percentage
+      SELECT id, name, minimum_score_percentage
       FROM seasons 
       WHERE is_active = true 
       AND start_date <= NOW() 
@@ -69,8 +69,8 @@ router.get('/', authenticateUser, async (req, res) => {
 
     console.log('Active season found:', activeSeason);
 
-    // If there's a qualification round, check if the user is qualified
-    if (activeSeason.is_qualification_round === false && req.user) {
+    // Check if the user is qualified for this season
+    if (req.user) {
       console.log('Checking if user is qualified for this season');
       
       // Check if user has qualified in a previous qualification round
@@ -167,7 +167,6 @@ router.get('/', authenticateUser, async (req, res) => {
       season: {
         id: activeSeason.id,
         name: activeSeason.name,
-        isQualificationRound: activeSeason.is_qualification_round,
         minimumScorePercentage: activeSeason.minimum_score_percentage
       }
     });
@@ -199,7 +198,6 @@ router.get('/', authenticateUser, async (req, res) => {
       season: {
         id: 1,
         name: 'Default Season',
-        isQualificationRound: false,
         minimumScorePercentage: 60
       },
       message: 'Using sample questions. The quiz database is currently being updated.',
