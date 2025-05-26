@@ -589,7 +589,4 @@ app.put("/api/admin/questions/:id", isAdmin, async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Quiz backend listening at http://localhost:${port}`)
-});
 // end point to get all leaderboard
