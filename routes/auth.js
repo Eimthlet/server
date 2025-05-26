@@ -159,7 +159,8 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({
       success: false,
-      error: 'Email and password are required'
+      error: 'Please enter both your email and password',
+      code: 'MISSING_CREDENTIALS'
     });
   }
 
@@ -170,7 +171,8 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid email or password'
+        error: 'The email or password you entered is incorrect',
+        code: 'INVALID_CREDENTIALS'
       });
     }
 
@@ -178,7 +180,9 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     if (user.is_disqualified) {
       return res.status(403).json({
         success: false,
-        error: 'Your account has been disqualified'
+        error: 'Your account has been temporarily suspended',
+        details: 'Please contact support for assistance',
+        code: 'ACCOUNT_SUSPENDED'
       });
     }
 
@@ -188,7 +192,8 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid email or password'
+        error: 'The email or password you entered is incorrect',
+        code: 'INVALID_CREDENTIALS'
       });
     }
 

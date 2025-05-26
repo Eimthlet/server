@@ -55,18 +55,32 @@ export const authenticateUser = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (error) {
+    console.error('Authentication error:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    
+    // Provide user-friendly error messages
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ 
-        error: 'Invalid Token', 
-        details: 'The provided authentication token is invalid.' 
+        error: 'Your session is invalid or has expired', 
+        details: 'Please log in again to continue.',
+        code: 'INVALID_TOKEN'
+      });
+    } else if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Your session has expired', 
+        details: 'Please log in again to continue.',
+        code: 'TOKEN_EXPIRED'
+      });
+    } else {
+      res.status(500).json({ 
+        error: 'We encountered a problem with your session', 
+        details: 'Please try logging in again.',
+        code: 'AUTH_ERROR'
       });
     }
-    
-    console.error('Authentication error:', error);
-    res.status(500).json({ 
-      error: 'Server Error', 
-      details: 'An unexpected error occurred during authentication.' 
-    });
   }
 };
 
@@ -104,16 +118,18 @@ export const isAdmin = (req, res, next) => {
     const currentTime = Math.floor(Date.now() / 1000);
     if (decoded.exp && decoded.exp < currentTime) {
       return res.status(401).json({ 
-        error: 'Token Expired', 
-        details: 'Your authentication token has expired. Please log in again.' 
+        error: 'Your session has expired', 
+        details: 'Please log in again to continue.',
+        code: 'TOKEN_EXPIRED'
       });
     }
 
     // Check admin status
     if (!decoded.isAdmin) {
       return res.status(403).json({ 
-        error: 'Forbidden', 
-        details: 'Admin access required. Your account does not have admin privileges.' 
+        error: 'Access restricted', 
+        details: 'This area is only accessible to administrators.',
+        code: 'ADMIN_REQUIRED'
       });
     }
 
