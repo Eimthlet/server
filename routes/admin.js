@@ -278,6 +278,81 @@ router.get('/questions', isAdmin, async (req, res) => {
   }
 });
 
+// Add a new question
+router.post('/questions', isAdmin, async (req, res) => {
+  const { 
+    question, 
+    options, 
+    correctAnswer, 
+    category, 
+    difficulty, 
+    timeLimit = 30 
+  } = req.body;
+
+  // Basic validation
+  if (!question || !options || !correctAnswer || !category || !difficulty) {
+    return res.status(400).json({ 
+      error: 'Missing required fields',
+      required: ['question', 'options', 'correctAnswer', 'category', 'difficulty']
+    });
+  }
+
+  if (!Array.isArray(options) || options.length < 2) {
+    return res.status(400).json({ 
+      error: 'Options must be an array with at least 2 items' 
+    });
+  }
+
+  if (!options.includes(correctAnswer)) {
+    return res.status(400).json({ 
+      error: 'Correct answer must be one of the provided options' 
+    });
+  }
+
+  try {
+    const newQuestion = await db.one(
+      `INSERT INTO questions (
+        question, 
+        options, 
+        correct_answer, 
+        category, 
+        difficulty, 
+        time_limit,
+        created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7) 
+      RETURNING 
+        id,
+        question,
+        options,
+        correct_answer as "correctAnswer",
+        time_limit as "timeLimit",
+        category,
+        difficulty,
+        created_at as "createdAt"`,
+      [
+        question,
+        options,
+        correctAnswer,
+        category,
+        difficulty,
+        timeLimit,
+        req.user.id // created_by
+      ]
+    );
+
+    res.status(201).json({
+      message: 'Question added successfully',
+      question: newQuestion
+    });
+  } catch (error) {
+    console.error('Error adding question:', error);
+    res.status(500).json({ 
+      error: 'Failed to add question',
+      details: error.message 
+    });
+  }
+});
+
 // Get season statistics
 router.get('/seasons', isAdmin, async (req, res) => {
   const query = `
