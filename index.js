@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from "express";
 import cors from "cors";
 import jwt from 'jsonwebtoken';
+import cookieParser from 'cookie-parser';
 
 // Config
 import db from './config/database.js';
@@ -13,6 +14,7 @@ import paychanguRoutes from './routes/paychangu.js';
 import adminRoutes from './routes/admin.js';
 import adminQuizRoutes from './routes/admin-quiz.js';
 import adminSeasonsRoutes from './routes/admin-seasons.js';
+import adminUsersRoutes from './routes/admin-users.js';
 import resultsRoutes from "./routes/results.js";
 import questionsRoutes from "./routes/questions.js";
 import quizRoutes from "./routes/quiz.js";
@@ -22,6 +24,7 @@ import qualificationRoutes from "./routes/qualification.js";
 
 // Middleware
 import { isAdmin, authenticateUser } from './middleware/auth.js';
+import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
 
 // Initialize Express app
 const app = express();
@@ -39,7 +42,15 @@ const corsOptions = {
       process.env.FRONTEND_URL,
       'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
       'https://car-quizz.vercel.app',
-      'https://car-quizz.onrender.com'
+      'https://car-quizz.onrender.com',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:4000',
+      'http://localhost:4001',
+      'http://localhost:4002',
+      'http://localhost:4003',
+      'http://localhost:4004',
+      'http://localhost:4005'
     ];
     
     if (!origin || allowedOrigins.includes(origin)) {
@@ -75,6 +86,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(express.static('public'));
+app.use(cookieParser()); // Parse cookies
 
 // Log all requests
 app.use((req, res, next) => {
@@ -121,6 +133,7 @@ app.use('/', paychanguRoutes);
 app.use('/api/admin', isAdmin, adminRoutes);
 app.use('/api/admin/quiz', isAdmin, adminQuizRoutes);
 app.use('/api/admin/seasons', isAdmin, adminSeasonsRoutes);
+app.use('/api/admin/users', adminUsersRoutes); // New admin users route
 app.use('/api/questions', questionsRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/results', resultsRoutes);
@@ -133,27 +146,8 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'API endpoint not found' });
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Global error handler:', err);
-  
-  // Handle JWT errors
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-  
-  // Handle database errors
-  if (err.code === '23505') { // Unique violation
-    return res.status(409).json({ error: 'Duplicate entry', details: err.detail });
-  }
-  
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'production' 
-      ? 'An unexpected error occurred' 
-      : err.message
-  });
-});
+// Global error handler middleware
+app.use(errorHandler);
 
 // Progress endpoint (moved from auth routes)
 app.post("/api/progress", async (req, res) => {
@@ -584,7 +578,7 @@ app.post("/api/admin/seasons/:id/activate", isAdmin, async (req, res) => {
 
     // Get the updated season
     const season = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM seasons WHERE id = ?', [id], (err, row) => {
+      db.get('SELECT * FROM seasons WHERE id = $1', [id], (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });

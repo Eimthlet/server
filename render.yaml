@@ -24,4 +24,12 @@ services:
         value: https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app
       - key: NODE_ENV
         value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PAYCHANGU_PUBLIC_KEY
+        value: PUB-TEST-DZpxF2GNMJkv0n76gcLmC4nXtNpk66za
+      - key: PAYCHANGU_SECRET_KEY
+        value: SEC-TEST-GfzdKZQQFnGNzRdUjX7gm09iDOob2E8z
+      - key: PAYCHANGU_PAYMENT_URL
+        value: https://api.paychangu.com/payment
     plan: free

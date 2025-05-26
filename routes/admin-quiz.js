@@ -1,11 +1,12 @@
 import express from 'express';
 import { isAdmin } from '../middleware/auth.js';
 import db from '../config/database.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 
 // Get all quiz attempts with user details
-router.get('/attempts', isAdmin, async (req, res) => {
+router.get('/attempts', isAdmin, asyncHandler(async (req, res) => {
   try {
     const attempts = await db.any(`
       SELECT 
@@ -32,12 +33,12 @@ router.get('/attempts', isAdmin, async (req, res) => {
     res.json(attempts);
   } catch (error) {
     console.error('Error fetching quiz attempts:', error);
-    res.status(500).json({ error: 'Could not fetch quiz attempts' });
+    throw error;
   }
-});
+}));
 
 // Get detailed progress for a specific attempt
-router.get('/attempts/:attemptId', isAdmin, async (req, res) => {
+router.get('/attempts/:attemptId', isAdmin, asyncHandler(async (req, res) => {
   const { attemptId } = req.params;
   
   try {
@@ -83,12 +84,12 @@ router.get('/attempts/:attemptId', isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching attempt details:', error);
-    res.status(500).json({ error: 'Could not fetch attempt details' });
+    throw error;
   }
-});
+}));
 
 // Reset a user's quiz attempt (admin only)
-router.delete('/attempts/:attemptId', isAdmin, async (req, res) => {
+router.delete('/attempts/:attemptId', isAdmin, asyncHandler(async (req, res) => {
   const { attemptId } = req.params;
   
   try {
@@ -108,12 +109,12 @@ router.delete('/attempts/:attemptId', isAdmin, async (req, res) => {
     res.json({ message: 'Quiz attempt reset successfully' });
   } catch (error) {
     console.error('Error resetting quiz attempt:', error);
-    res.status(500).json({ error: 'Could not reset quiz attempt' });
+    throw error;
   }
-});
+}));
 
 // Get quiz statistics
-router.get('/statistics', isAdmin, async (req, res) => {
+router.get('/statistics', isAdmin, asyncHandler(async (req, res) => {
   try {
     const stats = await db.one(`
       SELECT
@@ -160,8 +161,8 @@ router.get('/statistics', isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching quiz statistics:', error);
-    res.status(500).json({ error: 'Could not fetch quiz statistics' });
+    throw error;
   }
-});
+}));
 
 export default router;

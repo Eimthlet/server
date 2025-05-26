@@ -4,6 +4,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { isAdmin } from '../middleware/auth.js';
 import db from '../config/database.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
 
 // Ensure all routes that require admin access use the middleware
 
@@ -11,7 +12,7 @@ const router = express.Router();
 const DISQUALIFIED_USERS_PATH = path.join(process.cwd(), 'disqualified_users.json');
 
 // Get all users with their quiz attempts and scores
-router.get('/users', isAdmin, async (req, res) => {
+router.get('/users', isAdmin, asyncHandler(async (req, res) => {
   const query = `
     SELECT 
       u.id,
@@ -37,12 +38,12 @@ router.get('/users', isAdmin, async (req, res) => {
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 // Get disqualified users
-router.get('/disqualified-users', isAdmin, async (req, res) => {
+router.get('/disqualified-users', isAdmin, asyncHandler(async (req, res) => {
   try {
     // Read disqualified users from file
     let disqualifiedUsers = [];
@@ -87,12 +88,12 @@ router.get('/disqualified-users', isAdmin, async (req, res) => {
     res.json(detailedDisqualifiedUsers);
   } catch (error) {
     console.error('Error fetching disqualified users:', error);
-    res.status(500).json({ error: 'Failed to fetch disqualified users' });
+    throw error;
   }
-});
+}));
 
 // Get detailed stats for a specific user
-router.get('/stats/:userId', isAdmin, async (req, res) => {
+router.get('/stats/:userId', isAdmin, asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const query = `
     SELECT 
@@ -114,12 +115,12 @@ router.get('/stats/:userId', isAdmin, async (req, res) => {
     res.json(rows);
   } catch (error) {
     console.error('Error fetching user stats:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 // Get dashboard statistics
-router.get('/stats', isAdmin, async (req, res) => {
+router.get('/stats', isAdmin, asyncHandler(async (req, res) => {
   try {
     console.log('Fetching admin dashboard statistics...');
     
@@ -200,16 +201,12 @@ router.get('/stats', isAdmin, async (req, res) => {
       table: error.table,
       constraint: error.constraint
     });
-    res.status(500).json({ 
-      error: 'Failed to fetch dashboard statistics',
-      message: error.message,
-      code: error.code
-    });
+    throw error;
   }
-});
+}));
 
 // Get comprehensive insights and statistics
-router.get('/insights-stats', isAdmin, async (req, res) => {
+router.get('/insights-stats', isAdmin, asyncHandler(async (req, res) => {
   try {
     // Get total users
     const [totalUsers] = await db.any('SELECT COUNT(*) as count FROM users');
@@ -270,12 +267,12 @@ router.get('/insights-stats', isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching insights stats:', error);
-    res.status(500).json({ error: 'Failed to fetch insights statistics' });
+    throw error;
   }
-});
+}));
 
 // Get all questions
-router.get('/questions', isAdmin, async (req, res) => {
+router.get('/questions', isAdmin, asyncHandler(async (req, res) => {
   try {
     console.log('Fetching all questions...');
     const questions = await db.any(
@@ -305,15 +302,12 @@ router.get('/questions', isAdmin, async (req, res) => {
     
   } catch (error) {
     console.error('Error fetching questions:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch questions',
-      details: error.message 
-    });
+    throw error;
   }
-});
+}));
 
 // Add a new question
-router.post('/questions', isAdmin, async (req, res) => {
+router.post('/questions', isAdmin, asyncHandler(async (req, res) => {
   const { 
     question, 
     options, 
@@ -380,15 +374,12 @@ router.post('/questions', isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Error adding question:', error);
-    res.status(500).json({ 
-      error: 'Failed to add question',
-      details: error.message 
-    });
+    throw error;
   }
-});
+}));
 
 // Get season statistics
-router.get('/seasons', isAdmin, async (req, res) => {
+router.get('/seasons', isAdmin, asyncHandler(async (req, res) => {
   const query = `
     SELECT 
       s.id,
@@ -408,12 +399,12 @@ router.get('/seasons', isAdmin, async (req, res) => {
     res.json(rows);
   } catch (error) {
     console.error('Error fetching season stats:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 // Create a new season
-router.post('/seasons', isAdmin, async (req, res) => {
+router.post('/seasons', isAdmin, asyncHandler(async (req, res) => {
   const { name, startDate, endDate } = req.body;
   
   if (!name || !startDate || !endDate) {
@@ -431,12 +422,12 @@ router.post('/seasons', isAdmin, async (req, res) => {
     res.json({ id: result.id });
   } catch (error) {
     console.error('Error creating season:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 // Update a season
-router.put('/seasons/:id', isAdmin, async (req, res) => {
+router.put('/seasons/:id', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     const { name, startDate, endDate } = req.body;
@@ -479,12 +470,12 @@ router.put('/seasons/:id', isAdmin, async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error updating season:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 // Delete a season
-router.delete('/seasons/:id', isAdmin, async (req, res) => {
+router.delete('/seasons/:id', isAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
   
   try {
@@ -492,12 +483,12 @@ router.delete('/seasons/:id', isAdmin, async (req, res) => {
     res.json({ message: 'Season deleted successfully' });
   } catch (error) {
     console.error('Error deleting season:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 // Activate a season
-router.put('/seasons/:id/activate', isAdmin, async (req, res) => {
+router.put('/seasons/:id/activate', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -507,12 +498,12 @@ router.put('/seasons/:id/activate', isAdmin, async (req, res) => {
     res.json(season);
   } catch (error) {
     console.error('Error activating season:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 // Create a new round
-router.post('/rounds', isAdmin, async (req, res) => {
+router.post('/rounds', isAdmin, asyncHandler(async (req, res) => {
   const { name, startDate, endDate, seasonId, roundNumber } = req.body;
   
   if (!name || !startDate || !endDate || !seasonId || !roundNumber) {
@@ -531,12 +522,12 @@ router.post('/rounds', isAdmin, async (req, res) => {
     res.json(round);
   } catch (error) {
     console.error('Error creating round:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 // Update a round
-router.put('/rounds/:id', isAdmin, async (req, res) => {
+router.put('/rounds/:id', isAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { name, startDate, endDate, roundNumber } = req.body;
   
@@ -582,8 +573,8 @@ router.put('/rounds/:id', isAdmin, async (req, res) => {
     res.json(activatedRound);
   } catch (error) {
     console.error('Error activating round:', error);
-    res.status(500).json({ error: 'Database error' });
+    throw error;
   }
-});
+}));
 
 export default router;

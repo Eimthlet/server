@@ -1,11 +1,12 @@
 import express from 'express';
 import { isAdmin } from '../middleware/auth.js';
 import db from '../config/database.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 
 // Get all seasons
-router.get('/', isAdmin, async (req, res) => {
+router.get('/', isAdmin, asyncHandler(async (req, res) => {
   try {
     const seasons = await db.any(`
       SELECT 
@@ -28,12 +29,12 @@ router.get('/', isAdmin, async (req, res) => {
     res.json(seasons);
   } catch (error) {
     console.error('Error fetching seasons:', error);
-    res.status(500).json({ message: 'Server error while fetching seasons' });
+    throw error;
   }
-});
+}));
 
 // Get a specific season by ID
-router.get('/:id', isAdmin, async (req, res) => {
+router.get('/:id', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -62,12 +63,12 @@ router.get('/:id', isAdmin, async (req, res) => {
     res.json(season);
   } catch (error) {
     console.error('Error fetching season:', error);
-    res.status(500).json({ message: 'Server error while fetching season' });
+    throw error;
   }
-});
+}));
 
 // Create a new season
-router.post('/', isAdmin, async (req, res) => {
+router.post('/', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { 
       name, 
@@ -109,12 +110,12 @@ router.post('/', isAdmin, async (req, res) => {
     res.status(201).json(newSeason);
   } catch (error) {
     console.error('Error creating season:', error);
-    res.status(500).json({ message: 'Server error while creating season' });
+    throw error;
   }
-});
+}));
 
 // Update a season
-router.put('/:id', isAdmin, async (req, res) => {
+router.put('/:id', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     const { 
@@ -166,12 +167,12 @@ router.put('/:id', isAdmin, async (req, res) => {
     res.json(updatedSeason);
   } catch (error) {
     console.error('Error updating season:', error);
-    res.status(500).json({ message: 'Server error while updating season' });
+    throw error;
   }
-});
+}));
 
 // Delete a season
-router.delete('/:id', isAdmin, async (req, res) => {
+router.delete('/:id', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -201,12 +202,12 @@ router.delete('/:id', isAdmin, async (req, res) => {
     res.json({ message: 'Season deleted successfully' });
   } catch (error) {
     console.error('Error deleting season:', error);
-    res.status(500).json({ message: 'Server error while deleting season' });
+    throw error;
   }
-});
+}));
 
 // Get qualified users for a specific season
-router.get('/:id/qualified-users', isAdmin, async (req, res) => {
+router.get('/:id/qualified-users', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -232,12 +233,12 @@ router.get('/:id/qualified-users', isAdmin, async (req, res) => {
     res.json(qualifiedUsers);
   } catch (error) {
     console.error('Error fetching qualified users:', error);
-    res.status(500).json({ message: 'Server error while fetching qualified users' });
+    throw error;
   }
-});
+}));
 
 // Add questions to a season
-router.post('/:id/questions', isAdmin, async (req, res) => {
+router.post('/:id/questions', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     const { questions } = req.body;
@@ -288,8 +289,8 @@ router.post('/:id/questions', isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Error adding questions to season:', error);
-    res.status(500).json({ message: 'Server error while adding questions to season' });
+    throw error;
   }
-});
+}));
 
 export default router;

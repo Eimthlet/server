@@ -37,10 +37,68 @@ const paychanguCallback = async (req, res) => {
   }
 };
 
-// Register routes for both GET and POST at both paths
-['/', '/api/auth/'].forEach(path => {
+// Register routes for both GET and POST at all possible paths
+['/', '/api/', '/api/auth/'].forEach(path => {
   router.get(`${path}paychangu-callback`, paychanguCallback);
   router.post(`${path}paychangu-callback`, paychanguCallback);
+});
+
+// Payment verification endpoint
+router.post('/api/auth/verify-payment', async (req, res) => {
+  try {
+    const { tx_ref } = req.body;
+    
+    if (!tx_ref) {
+      return res.status(400).json({ error: 'Missing tx_ref parameter' });
+    }
+    
+    console.log('Verifying payment for tx_ref:', tx_ref);
+    
+    // Verify payment with PayChangu API
+    const verifyUrl = `https://api.paychangu.com/verify-payment/${tx_ref}`;
+    const verifyResponse = await fetch(verifyUrl, {
+      headers: {
+        'Authorization': `Bearer ${process.env.PAYCHANGU_SECRET_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const verifyResult = await verifyResponse.json();
+    console.log('Payment verification result:', verifyResult);
+    
+    // Check if payment was successful
+    if (!verifyResponse.ok || !verifyResult.data || 
+        (verifyResult.data.status !== 'success' && verifyResult.data.status !== 'successful')) {
+      return res.status(402).json({ 
+        success: false, 
+        error: 'Payment not verified', 
+        details: verifyResult 
+      });
+    }
+    
+    // Check if we have a pending registration for this tx_ref
+    const pending = await db.oneOrNone('SELECT * FROM pending_registrations WHERE tx_ref = $1', [tx_ref]);
+    if (!pending) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'No pending registration found for this transaction' 
+      });
+    }
+    
+    // Return success
+    res.json({ 
+      success: true, 
+      message: 'Payment verified successfully',
+      email: pending.email
+    });
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to verify payment', 
+      details: error.message 
+    });
+  }
 });
 
 // Main callback handler function

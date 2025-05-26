@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import { asyncHandler, formatErrorResponse } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 
@@ -23,262 +24,335 @@ function generateRefreshToken() {
 }
 
 // Registration endpoint
-router.post(['/register', '/api/auth/register'], async (req, res) => {
+router.post(['/register', '/api/auth/register'], asyncHandler(async (req, res) => {
   console.log('Register request received:', req.body);
   const { username, email, password, phone, amount } = req.body;
 
+  // Validate required fields
   if (!email || !password || !phone || !amount) {
     console.log('Registration failed: Missing required fields');
-    return res.status(400).json({ error: 'Email, password, phone, and amount are required' });
+    return res.status(400).json({ 
+      success: false,
+      error: 'Email, password, phone, and amount are required' 
+    });
+  }
+
+  // Validate email format
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Please provide a valid email address' 
+    });
+  }
+
+  // Validate password strength
+  if (password.length < 8) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Password must be at least 8 characters long' 
+    });
+  }
+
+  // Validate username if provided
+  if (username) {
+    if (username.length < 3 || username.length > 20) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username must be between 3 and 20 characters' 
+      });
+    }
+    
+    const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+    if (!usernameRegex.test(username)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username can only contain letters, numbers, underscores and hyphens' 
+      });
+    }
+  }
+
+  // Validate phone number
+  const phoneRegex = /^\+?[0-9]{10,15}$/;
+  if (!phoneRegex.test(phone.replace(/\s/g, ''))) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Please provide a valid phone number (10-15 digits)' 
+    });
+  }
+
+  // Validate amount
+  if (isNaN(amount) || amount <= 0) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Amount must be a positive number' 
+    });
   }
 
   // Check for duplicate email or username
-  try {
-    const userByEmail = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
-    if (userByEmail) {
-      return res.status(400).json({ error: 'Email already registered' });
-      return;
-    }
-    if (username) {
-      const userByUsername = await db.oneOrNone('SELECT * FROM users WHERE username = $1', [username]);
-      if (userByUsername) {
-        return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
-      return;
-      }
-    }
-    // Also check pending_registrations for duplicates
-    const pendingByEmail = await db.oneOrNone('SELECT * FROM pending_registrations WHERE email = $1', [email]);
-    if (pendingByEmail) {
-      return res.status(400).json({ error: 'A registration is already pending for this email. Complete payment or wait.' });
-      return;
-    }
-    if (username) {
-      const pendingByUsername = await db.oneOrNone('SELECT * FROM pending_registrations WHERE username = $1', [username]);
-      if (pendingByUsername) {
-        return res.status(400).json({ error: 'A registration is already pending for this username. Complete payment or wait.' });
-      return;
-      }
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    // Generate unique tx_ref
-    const tx_ref = 'TX' + Date.now() + Math.floor(Math.random() * 1000000);
-    // Store registration info in pending_registrations
-    await db.none(
-      'INSERT INTO pending_registrations (tx_ref, username, email, password_hash, phone, amount) VALUES ($1, $2, $3, $4, $5, $6)',
-      [tx_ref, username, email, hashedPassword, phone, amount]
-    );
-    // Respond with tx_ref and PayChangu public key
-    res.json({
-      tx_ref,
-      public_key: process.env.PAYCHANGU_PUBLIC_KEY,
-      amount,
-      email,
-      phone,
-      message: 'Proceed to payment with this tx_ref.'
+  const userByEmail = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
+  if (userByEmail) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Email already registered' 
     });
-  } catch (error) {
-    console.error('Registration error:', error);
-    if (error.code === '23505') {
-      if (error.constraint === 'pending_registrations_tx_ref_key') {
-        return res.status(400).json({ error: 'Duplicate transaction reference. Please try again.' });
-      }
-    }
-    res.status(500).json({ error: 'Registration failed. Please try again.', details: error.message });
   }
-});
+  
+  if (username) {
+    const userByUsername = await db.oneOrNone('SELECT * FROM users WHERE username = $1', [username]);
+    if (userByUsername) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username already taken. Please choose another username.' 
+      });
+    }
+  }
+  
+  // Also check pending_registrations for duplicates
+  const pendingByEmail = await db.oneOrNone('SELECT * FROM pending_registrations WHERE email = $1', [email]);
+  if (pendingByEmail) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'A registration is already pending for this email. Complete payment or wait.' 
+    });
+  }
+  
+  if (username) {
+    const pendingByUsername = await db.oneOrNone('SELECT * FROM pending_registrations WHERE username = $1', [username]);
+    if (pendingByUsername) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'A registration is already pending for this username. Complete payment or wait.' 
+      });
+    }
+  }
+
+  // Hash password
+  const hashedPassword = await bcrypt.hash(password, 10);
+  
+  // Generate unique tx_ref
+  const tx_ref = 'TX' + Date.now() + Math.floor(Math.random() * 1000000);
+  
+  // Store registration info in pending_registrations
+  await db.none(
+    'INSERT INTO pending_registrations (tx_ref, username, email, password_hash, phone, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+    [tx_ref, username, email, hashedPassword, phone, amount]
+  );
+  
+  // Respond with tx_ref and PayChangu public key
+  res.json({
+    success: true,
+    tx_ref,
+    public_key: process.env.PAYCHANGU_PUBLIC_KEY,
+    amount,
+    email,
+    phone,
+    message: 'Proceed to payment with this tx_ref.'
+  });
+}));
 
 // Login endpoint
-router.post(['/login', '/api/auth/login'], async (req, res) => {
-  console.log('Login request received:', { email: req.body.email });
+router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-
+  
+  // Validate required fields
   if (!email || !password) {
-    console.log('Login failed: Missing email or password');
-    return res.status(400).json({ error: 'Email and password are required' });
+    return res.status(400).json({
+      success: false,
+      error: 'Email and password are required'
+    });
   }
 
   try {
-    // Use oneOrNone instead of one to avoid error when user doesn't exist
+    // Find user by email
     const user = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
+    
     if (!user) {
-      console.log('Login failed: User not found', {
-        email: email,
-        attemptedAdminLogin: email.endsWith('@admin.com')
-      });
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    if (!isValidPassword) {
-      console.log('Login failed: Invalid password', {
-        email: email,
-        isAdmin: user.role === 'admin',
-        adminLoginAttempt: email.endsWith('@admin.com')
-      });
-      return res.status(401).json({ 
-        error: 'Invalid credentials', 
-        details: 'The password you entered is incorrect. Please try again.'
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
       });
     }
 
-    // Additional check for admin authentication
-    if (email.endsWith('@admin.com') && user.role !== 'admin') {
-      console.log('Login failed: Non-admin user attempting admin login', {
-        email: email,
-        userId: user.id
+    // Check if user is disqualified
+    if (user.is_disqualified) {
+      return res.status(403).json({
+        success: false,
+        error: 'Your account has been disqualified'
       });
-      return res.status(403).json({ error: 'Unauthorized admin access' });
     }
 
-    const refreshToken = generateRefreshToken();
+    // Compare password
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
 
-    // Store refresh token in separate table
-    // First delete any existing tokens for this user
-    await db.none('DELETE FROM refresh_tokens WHERE user_id = $1', [user.id]);
-    // Then insert the new token
-    const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-    await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, refreshToken, refreshExpiresAt]);
+    // Create JWT payload
+    const payload = {
+      id: user.id,
+      email: user.email,
+      isAdmin: user.role === 'admin'
+    };
 
-    const token = jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email, 
-        isAdmin: user.role === 'admin',
-        exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
-      }, 
-      JWT_SECRET
+    // Generate tokens
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+    const refreshToken = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    
+    // Store refresh token in database
+    await db.none(
+      'INSERT INTO refresh_tokens(user_id, token, expires_at) VALUES($1, $2, NOW() + INTERVAL \'7 days\')',
+      [user.id, refreshToken]
     );
 
-    console.log('User logged in successfully', {
-      email: email,
-      userId: user.id,
-      isAdmin: user.role === 'admin'
-    });
-    
-    // Set HTTP-only cookies for both tokens
-    const isProduction = process.env.NODE_ENV === 'production';
+    // Set HTTP-only cookies
     const cookieOptions = {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       path: '/',
-      domain: process.env.COOKIE_DOMAIN || undefined,
-      maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
+      domain: process.env.COOKIE_DOMAIN || undefined
     };
     
-    // Set access token cookie
-    res.cookie('accessToken', token, cookieOptions);
+    // Set cookies
+    res.cookie('accessToken', token, {
+      ...cookieOptions,
+      maxAge: 60 * 60 * 1000 // 1 hour
+    });
     
-    // Set refresh token cookie with longer expiration
     res.cookie('refreshToken', refreshToken, {
       ...cookieOptions,
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
-    
-    // Also send tokens in the response body for clients that prefer that approach
+
     res.json({
-      user: { id: user.id, username: user.username, email: user.email, role: user.role },
-      token,
-      refreshToken
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        isAdmin: user.role === 'admin'
+      }
     });
   } catch (error) {
-    console.error('Database error during login:', error);
-    res.status(500).json({ error: 'Database error', details: error.message });
+    console.error('Login error:', error);
+    throw error;
   }
-});
+}));
 
 // Refresh token endpoint
-router.post('/refresh', async (req, res) => {
-  const { refreshToken } = req.body;
+router.post('/refresh', asyncHandler(async (req, res) => {
+  // Get refresh token from cookie instead of request body
+  const refreshToken = req.cookies.refreshToken;
 
   if (!refreshToken) {
-    return res.status(401).json({ error: 'Refresh token is required' });
+    return res.status(401).json({ 
+      success: false,
+      error: 'Refresh token is required' 
+    });
   }
 
-  try {
-    // Find the refresh token in the refresh_tokens table
-    const tokenRecord = await db.oneOrNone(
-      'SELECT rt.*, u.* FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id WHERE rt.token = $1',
-      [refreshToken]
-    );
-    
-    if (!tokenRecord) {
-      return res.status(403).json({ error: 'Invalid refresh token' });
-    }
-
-    const user = {
-      id: tokenRecord.user_id,
-      email: tokenRecord.email,
-      role: tokenRecord.role
-    };
-
-    const newRefreshToken = generateRefreshToken();
-
-    // Update refresh token in the database
-    await db.none('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
-    const refreshExpiresAt2 = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, newRefreshToken, refreshExpiresAt2]);
-
-    const token = jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email, 
-        isAdmin: user.role === 'admin',
-        exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
-      }, 
-      JWT_SECRET
-    );
-
-    // Set HTTP-only cookies for both tokens
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieOptions = {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
-      path: '/',
-      domain: process.env.COOKIE_DOMAIN || undefined,
-      maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
-    };
-    
-    // Set access token cookie
-    res.cookie('accessToken', token, cookieOptions);
-    
-    // Set refresh token cookie with longer expiration
-    res.cookie('refreshToken', newRefreshToken, {
-      ...cookieOptions,
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+  // Find the refresh token in the refresh_tokens table
+  const tokenRecord = await db.oneOrNone(
+    'SELECT rt.*, u.* FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id WHERE rt.token = $1',
+    [refreshToken]
+  );
+  
+  if (!tokenRecord) {
+    return res.status(403).json({ 
+      success: false,
+      error: 'Invalid refresh token' 
     });
-    
-    // Also send tokens in the response body
-    res.json({
-      token,
-      refreshToken: newRefreshToken
-    });
-  } catch (error) {
-    console.error('Error updating refresh token:', error);
-    res.status(500).json({ error: 'Could not update refresh token', details: error.message });
   }
-});
+
+  const user = {
+    id: tokenRecord.user_id,
+    email: tokenRecord.email,
+    role: tokenRecord.role
+  };
+
+  const newRefreshToken = generateRefreshToken();
+
+  // Update refresh token in the database
+  await db.none('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+  const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+  await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, newRefreshToken, refreshExpiresAt]);
+
+  const token = jwt.sign(
+    { 
+      id: user.id, 
+      email: user.email, 
+      isAdmin: user.role === 'admin',
+      exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
+    }, 
+    JWT_SECRET
+  );
+
+  // Set HTTP-only cookies for both tokens
+  const isProduction = process.env.NODE_ENV === 'production';
+  const cookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/',
+    domain: process.env.COOKIE_DOMAIN || undefined,
+    maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
+  };
+  
+  // Set access token cookie
+  res.cookie('accessToken', token, cookieOptions);
+  
+  // Set refresh token cookie with longer expiration
+  res.cookie('refreshToken', newRefreshToken, {
+    ...cookieOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+  });
+  
+  // Also send tokens in the response body
+  res.json({
+    success: true,
+    token,
+    refreshToken: newRefreshToken
+  });
+}));
 
 // Route to check token validity
-router.get('/check-token', (req, res) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+router.get('/check-token', asyncHandler(async (req, res) => {
+  // Get token from cookie instead of authorization header
+  const token = req.cookies.accessToken;
 
   if (!token) {
-    return res.status(401).json({ valid: false, error: 'No token provided' });
+    return res.status(401).json({ 
+      success: false,
+      valid: false, 
+      error: 'No token provided' 
+    });
   }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Get user details from database to ensure the user still exists
+    const user = await db.oneOrNone('SELECT id, email, role FROM users WHERE id = $1', [decoded.id]);
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        valid: false,
+        error: 'User no longer exists'
+      });
+    }
+    
     res.json({
+      success: true,
       valid: true,
       user: {
-        id: decoded.id,
-        email: decoded.email,
-        isAdmin: decoded.isAdmin
+        id: user.id,
+        email: user.email,
+        isAdmin: user.role === 'admin'
       }
     });
   } catch (err) {
@@ -287,11 +361,46 @@ router.get('/check-token', (req, res) => {
       message: err.message
     });
     res.status(401).json({
+      success: false,
       valid: false,
       error: 'Invalid token',
       details: err.name
     });
   }
-});
+}));
+
+// Logout endpoint to clear cookies
+router.post('/logout', asyncHandler(async (req, res) => {
+  // Clear all auth cookies
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
+    domain: process.env.COOKIE_DOMAIN || undefined
+  };
+  
+  res.clearCookie('accessToken', cookieOptions);
+  res.clearCookie('refreshToken', cookieOptions);
+  
+  // Also clear any refresh tokens from the database if the user is authenticated
+  try {
+    const token = req.cookies.accessToken;
+    if (token) {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded && decoded.id) {
+        await db.none('DELETE FROM refresh_tokens WHERE user_id = $1', [decoded.id]);
+      }
+    }
+  } catch (error) {
+    // If token verification fails, we still want to clear cookies
+    console.log('Error during logout token verification:', error);
+  }
+  
+  res.json({
+    success: true,
+    message: 'Logged out successfully'
+  });
+}));
 
 export default router;
