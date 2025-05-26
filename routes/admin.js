@@ -259,14 +259,15 @@ router.get('/questions', isAdmin, async (req, res) => {
         q.id,
         q.question,
         q.options,
-        q.correct_answer as correctAnswer,
-        q.time_limit as timeLimit,
+        q.correct_answer as "correctAnswer",
+        q.time_limit as "timeLimit",
         q.category,
         q.difficulty,
-        COUNT(a.id) as attempts
+        (SELECT COUNT(*) FROM user_responses ur WHERE ur.question_id = q.id) as attempts,
+        u.username as "createdBy",
+        q.created_at as "createdAt"
       FROM questions q
-      LEFT JOIN quiz_attempts a ON q.id = a.question_id
-      GROUP BY q.id
+      LEFT JOIN users u ON q.created_by = u.id
       ORDER BY q.id DESC`
     );
     
