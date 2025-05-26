@@ -220,7 +220,8 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
       secure: true, // Always use secure cookies
       sameSite: 'None', // Use capital N for SameSite=None
       path: '/',
-      domain: '.onrender.com' // Set domain for all Render subdomains
+      domain: 'car-quizz.onrender.com', // Set exact domain
+      partitioned: true // Add partitioning for better cross-site isolation
     };
     
     // Add the Partitioned attribute as a string in the header directly
