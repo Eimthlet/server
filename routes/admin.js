@@ -118,6 +118,72 @@ router.get('/stats/:userId', isAdmin, async (req, res) => {
   }
 });
 
+// Get comprehensive insights and statistics
+router.get('/insights-stats', isAdmin, async (req, res) => {
+  try {
+    // Get total users
+    const [totalUsers] = await db.any('SELECT COUNT(*) as count FROM users');
+    
+    // Get active users (users who have started at least one quiz)
+    const [activeUsers] = await db.any(
+      'SELECT COUNT(DISTINCT user_id) as count FROM user_quiz_attempts'
+    );
+    
+    // Get quiz completion statistics
+    const quizStats = await db.any(
+      `SELECT 
+        COUNT(*) as total_attempts,
+        COUNT(CASE WHEN completed = true THEN 1 END) as completed_attempts,
+        AVG(score) as average_score
+      FROM user_quiz_attempts`
+    );
+    
+    // Get recent activity
+    const recentActivity = await db.any(
+      `SELECT 
+        uqa.user_id,
+        u.username,
+        uqa.score,
+        uqa.completed_at
+      FROM user_quiz_attempts uqa
+      JOIN users u ON u.id = uqa.user_id
+      WHERE uqa.completed_at >= NOW() - INTERVAL '7 days'
+      ORDER BY uqa.completed_at DESC
+      LIMIT 10`
+    );
+
+    // Get top performers
+    const topPerformers = await db.any(
+      `SELECT 
+        u.id,
+        u.username,
+        u.email,
+        uqa.score,
+        uqa.completed_at
+      FROM users u
+      JOIN user_quiz_attempts uqa ON u.id = uqa.user_id
+      WHERE uqa.completed = true
+      ORDER BY uqa.score DESC
+      LIMIT 5`
+    );
+
+    res.json({
+      totalUsers: totalUsers.count,
+      activeUsers: activeUsers.count,
+      quizStats: {
+        totalAttempts: quizStats[0].total_attempts,
+        completedAttempts: quizStats[0].completed_attempts,
+        averageScore: quizStats[0].average_score
+      },
+      recentActivity,
+      topPerformers
+    });
+  } catch (error) {
+    console.error('Error fetching insights stats:', error);
+    res.status(500).json({ error: 'Failed to fetch insights statistics' });
+  }
+});
+
 // Get season statistics
 router.get('/seasons', isAdmin, async (req, res) => {
   const query = `
