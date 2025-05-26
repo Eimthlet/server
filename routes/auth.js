@@ -219,8 +219,8 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
       httpOnly: true,
       secure: true, // Always use secure cookies
       sameSite: 'none', // Always use sameSite=none for cross-site requests
-      path: '/',
-      domain: process.env.COOKIE_DOMAIN || undefined
+      path: '/'
+      // Removed domain restriction to avoid cookie rejection
     };
     
     // Add the Partitioned attribute as a string in the header directly

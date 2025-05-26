@@ -577,6 +577,158 @@ router.put('/rounds/:id', isAdmin, asyncHandler(async (req, res) => {
   }
 }));
 
+// Questions management endpoints
+router.get('/questions', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const questions = await db.any('SELECT * FROM questions ORDER BY id DESC');
+    
+    // Format the questions for the frontend
+    const formattedQuestions = questions.map(q => ({
+      id: q.id,
+      question: q.question,
+      options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+      correctAnswer: q.correct_answer,
+      category: q.category,
+      difficulty: q.difficulty,
+      seasonId: q.season_id
+    }));
+    
+    res.json(formattedQuestions);
+  } catch (error) {
+    console.error('Error fetching admin questions:', error);
+    res.status(500).json({
+      error: 'Failed to fetch questions',
+      message: 'An error occurred while retrieving questions',
+      code: 'ADMIN_QUESTIONS_ERROR'
+    });
+  }
+}));
+
+// Delete a question
+router.delete('/questions/:id', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if question exists
+    const question = await db.oneOrNone('SELECT * FROM questions WHERE id = $1', [id]);
+    
+    if (!question) {
+      return res.status(404).json({
+        error: 'Question not found',
+        message: 'The requested question does not exist',
+        code: 'QUESTION_NOT_FOUND'
+      });
+    }
+    
+    // Delete the question
+    await db.none('DELETE FROM questions WHERE id = $1', [id]);
+    
+    res.json({
+      success: true,
+      message: 'Question deleted successfully',
+      id: parseInt(id)
+    });
+  } catch (error) {
+    console.error('Error deleting question:', error);
+    res.status(500).json({
+      error: 'Failed to delete question',
+      message: 'An error occurred while deleting the question',
+      code: 'QUESTION_DELETE_ERROR'
+    });
+  }
+}));
+
+// Add a new question
+router.post('/questions', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { question, options, correctAnswer, category, difficulty, seasonId } = req.body;
+    
+    // Validate required fields
+    if (!question || !options || !correctAnswer || !category || !difficulty || !seasonId) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'All fields are required to create a question',
+        code: 'MISSING_FIELDS'
+      });
+    }
+    
+    // Insert the new question
+    const result = await db.one(
+      'INSERT INTO questions(question, options, correct_answer, category, difficulty, season_id) VALUES($1, $2, $3, $4, $5, $6) RETURNING id',
+      [question, JSON.stringify(options), correctAnswer, category, difficulty, seasonId]
+    );
+    
+    res.status(201).json({
+      success: true,
+      message: 'Question created successfully',
+      id: result.id,
+      question: {
+        id: result.id,
+        question,
+        options,
+        correctAnswer,
+        category,
+        difficulty,
+        seasonId
+      }
+    });
+  } catch (error) {
+    console.error('Error creating question:', error);
+    res.status(500).json({
+      error: 'Failed to create question',
+      message: 'An error occurred while creating the question',
+      code: 'QUESTION_CREATE_ERROR'
+    });
+  }
+}));
+
+// Update an existing question
+router.put('/questions/:id', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { question, options, correctAnswer, category, difficulty, seasonId } = req.body;
+    
+    // Check if question exists
+    const existingQuestion = await db.oneOrNone('SELECT * FROM questions WHERE id = $1', [id]);
+    
+    if (!existingQuestion) {
+      return res.status(404).json({
+        error: 'Question not found',
+        message: 'The requested question does not exist',
+        code: 'QUESTION_NOT_FOUND'
+      });
+    }
+    
+    // Update the question
+    await db.none(
+      'UPDATE questions SET question = $1, options = $2, correct_answer = $3, category = $4, difficulty = $5, season_id = $6 WHERE id = $7',
+      [question, JSON.stringify(options), correctAnswer, category, difficulty, seasonId, id]
+    );
+    
+    res.json({
+      success: true,
+      message: 'Question updated successfully',
+      id: parseInt(id),
+      question: {
+        id: parseInt(id),
+        question,
+        options,
+        correctAnswer,
+        category,
+        difficulty,
+        seasonId
+      }
+    });
+  } catch (error) {
+    console.error('Error updating question:', error);
+    res.status(500).json({
+      error: 'Failed to update question',
+      message: 'An error occurred while updating the question',
+      code: 'QUESTION_UPDATE_ERROR'
+    });
+  }
+}));
+
 // Add dashboard statistics endpoint
 router.get('/dashboard-stats', isAdmin, asyncHandler(async (req, res) => {
   try {
@@ -648,6 +800,219 @@ router.get('/dashboard-stats', isAdmin, asyncHandler(async (req, res) => {
       error: 'Failed to fetch dashboard statistics',
       message: 'An error occurred while retrieving dashboard data',
       code: 'DASHBOARD_STATS_ERROR'
+    });
+  }
+}));
+
+// Season management endpoints
+
+// Get all seasons
+router.get('/seasons', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const seasons = await db.any('SELECT * FROM seasons ORDER BY start_date DESC');
+    res.json(seasons);
+  } catch (error) {
+    console.error('Error fetching seasons:', error);
+    res.status(500).json({
+      error: 'Failed to fetch seasons',
+      message: 'An error occurred while retrieving seasons',
+      code: 'SEASONS_FETCH_ERROR'
+    });
+  }
+}));
+
+// Get a specific season
+router.get('/seasons/:id', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const season = await db.oneOrNone('SELECT * FROM seasons WHERE id = $1', [id]);
+    
+    if (!season) {
+      return res.status(404).json({
+        error: 'Season not found',
+        message: 'The requested season does not exist',
+        code: 'SEASON_NOT_FOUND'
+      });
+    }
+    
+    res.json(season);
+  } catch (error) {
+    console.error('Error fetching season:', error);
+    res.status(500).json({
+      error: 'Failed to fetch season',
+      message: 'An error occurred while retrieving the season',
+      code: 'SEASON_FETCH_ERROR'
+    });
+  }
+}));
+
+// Create a new season
+router.post('/seasons', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { name, startDate, endDate, isQualificationRound, minimumScorePercentage, isActive } = req.body;
+    
+    // Validate required fields
+    if (!name || !startDate || !endDate) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'Name, start date, and end date are required',
+        code: 'MISSING_FIELDS'
+      });
+    }
+    
+    // If setting this season as active, deactivate all other seasons
+    if (isActive) {
+      await db.none('UPDATE seasons SET is_active = false WHERE is_active = true');
+    }
+    
+    // Insert the new season
+    const result = await db.one(
+      `INSERT INTO seasons(
+        name, start_date, end_date, is_qualification_round, 
+        minimum_score_percentage, is_active
+      ) VALUES($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [
+        name, 
+        startDate, 
+        endDate, 
+        isQualificationRound || false, 
+        minimumScorePercentage || 60, 
+        isActive || false
+      ]
+    );
+    
+    res.status(201).json({
+      success: true,
+      message: 'Season created successfully',
+      id: result.id,
+      season: {
+        id: result.id,
+        name,
+        startDate,
+        endDate,
+        isQualificationRound: isQualificationRound || false,
+        minimumScorePercentage: minimumScorePercentage || 60,
+        isActive: isActive || false
+      }
+    });
+  } catch (error) {
+    console.error('Error creating season:', error);
+    res.status(500).json({
+      error: 'Failed to create season',
+      message: 'An error occurred while creating the season',
+      code: 'SEASON_CREATE_ERROR'
+    });
+  }
+}));
+
+// Update a season
+router.put('/seasons/:id', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, startDate, endDate, isQualificationRound, minimumScorePercentage, isActive } = req.body;
+    
+    // Check if season exists
+    const existingSeason = await db.oneOrNone('SELECT * FROM seasons WHERE id = $1', [id]);
+    
+    if (!existingSeason) {
+      return res.status(404).json({
+        error: 'Season not found',
+        message: 'The requested season does not exist',
+        code: 'SEASON_NOT_FOUND'
+      });
+    }
+    
+    // If setting this season as active, deactivate all other seasons
+    if (isActive) {
+      await db.none('UPDATE seasons SET is_active = false WHERE id != $1', [id]);
+    }
+    
+    // Update the season
+    await db.none(
+      `UPDATE seasons SET 
+        name = $1, 
+        start_date = $2, 
+        end_date = $3, 
+        is_qualification_round = $4, 
+        minimum_score_percentage = $5, 
+        is_active = $6 
+      WHERE id = $7`,
+      [
+        name, 
+        startDate, 
+        endDate, 
+        isQualificationRound, 
+        minimumScorePercentage, 
+        isActive, 
+        id
+      ]
+    );
+    
+    res.json({
+      success: true,
+      message: 'Season updated successfully',
+      id: parseInt(id),
+      season: {
+        id: parseInt(id),
+        name,
+        startDate,
+        endDate,
+        isQualificationRound,
+        minimumScorePercentage,
+        isActive
+      }
+    });
+  } catch (error) {
+    console.error('Error updating season:', error);
+    res.status(500).json({
+      error: 'Failed to update season',
+      message: 'An error occurred while updating the season',
+      code: 'SEASON_UPDATE_ERROR'
+    });
+  }
+}));
+
+// Delete a season
+router.delete('/seasons/:id', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if season exists
+    const season = await db.oneOrNone('SELECT * FROM seasons WHERE id = $1', [id]);
+    
+    if (!season) {
+      return res.status(404).json({
+        error: 'Season not found',
+        message: 'The requested season does not exist',
+        code: 'SEASON_NOT_FOUND'
+      });
+    }
+    
+    // Check if there are questions associated with this season
+    const questionCount = await db.one('SELECT COUNT(*) as count FROM questions WHERE season_id = $1', [id]);
+    
+    if (parseInt(questionCount.count) > 0) {
+      return res.status(400).json({
+        error: 'Season has questions',
+        message: 'Cannot delete a season that has questions. Delete the questions first or reassign them to another season.',
+        code: 'SEASON_HAS_QUESTIONS'
+      });
+    }
+    
+    // Delete the season
+    await db.none('DELETE FROM seasons WHERE id = $1', [id]);
+    
+    res.json({
+      success: true,
+      message: 'Season deleted successfully',
+      id: parseInt(id)
+    });
+  } catch (error) {
+    console.error('Error deleting season:', error);
+    res.status(500).json({
+      error: 'Failed to delete season',
+      message: 'An error occurred while deleting the season',
+      code: 'SEASON_DELETE_ERROR'
     });
   }
 }));

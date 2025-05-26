@@ -172,9 +172,10 @@ async function handlePayChanguCallback(req, res) {
       // Create the user and get the ID in a single variable that's accessible throughout the outer try block
       let userId;
       try {
+        // Make sure to set the role to 'user' and is_admin to false
         const result = await db.one(
-          'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
-          [pending.username, pending.email, pending.password_hash, 'user']
+          'INSERT INTO users (username, email, password_hash, role, is_admin) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+          [pending.username, pending.email, pending.password_hash, 'user', false]
         );
         userId = result.id;
         console.log('User created successfully with ID:', userId);
