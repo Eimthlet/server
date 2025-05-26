@@ -36,42 +36,31 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Middleware
+const allowedOrigins = [
+  'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
+  'http://localhost:3000',  // For local development
+  'http://localhost:5000'   // For local development
+];
+
 const corsOptions = {
   origin: function(origin, callback) {
-    // When credentials is true, we can't use wildcard origin
-    // Instead, we need to specify the exact origin or set it to the request origin
-    callback(null, origin || true);
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, origin);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
   },
   credentials: true,
-  exposedHeaders: ['X-XSRF-TOKEN'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'Origin', 'Accept']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'Origin', 'Accept', 'X-Requested-With'],
+  exposedHeaders: ['X-XSRF-TOKEN']
 };
 
+// Apply CORS configuration
 app.use(cors(corsOptions));
 
 // Enable pre-flight requests for all routes
 app.options('*', cors(corsOptions));
-
-// Set proper headers for all responses
-app.use((req, res, next) => {
-  // Add CORS headers to all responses
-  const origin = req.headers.origin;
-  if (origin) {
-    // Only set specific origin, not wildcard when credentials are used
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-access-token');
-  }
-  
-  // Handle preflight OPTIONS requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
-});
 
 app.use(express.json());
 app.use(express.static('public'));
