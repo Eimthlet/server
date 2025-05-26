@@ -244,7 +244,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
 }));
 
 // Refresh token endpoint
-router.post('/refresh', asyncHandler(async (req, res) => {
+router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => {
   // Get refresh token from cookie instead of request body
   const refreshToken = req.cookies.refreshToken;
 
@@ -319,7 +319,7 @@ router.post('/refresh', asyncHandler(async (req, res) => {
 }));
 
 // Route to check token validity
-router.get('/check-token', asyncHandler(async (req, res) => {
+router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, res) => {
   // Get token from cookie instead of authorization header
   const token = req.cookies.accessToken;
 
@@ -369,7 +369,7 @@ router.get('/check-token', asyncHandler(async (req, res) => {
 }));
 
 // Logout endpoint to clear cookies
-router.post('/logout', asyncHandler(async (req, res) => {
+router.post(['/logout', '/api/auth/logout'], asyncHandler(async (req, res) => {
   // Clear all auth cookies
   const cookieOptions = {
     httpOnly: true,

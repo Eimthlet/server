@@ -338,13 +338,37 @@ app.get('/api/admin/questions', isAdmin, async (req, res) => {
 
 // Admin route to add a new question
 app.post('/api/admin/questions', isAdmin, async (req, res) => {
-  const { question, options, correctAnswer, category, difficulty } = req.body;
+  const { question, options, correct_answer, category, difficulty, time_limit } = req.body;
 
   // Basic validation
-  if (!question || !options || !correctAnswer || !category || !difficulty) {
+  if (!question || !options || !correct_answer || !category || !difficulty) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
+  try {
+    // Convert options array to JSON string for storage
+    const optionsJson = JSON.stringify(options);
+    
+    // Insert the new question
+    const result = await db.one(
+      'INSERT INTO questions(question, options, correct_answer, category, difficulty, time_limit) VALUES($1, $2, $3, $4, $5, $6) RETURNING *',
+      [question, optionsJson, correct_answer, category, difficulty, time_limit || 30]
+    );
+    
+    // Parse options back to array for response
+    const newQuestion = {
+      ...result,
+      options: JSON.parse(result.options || '[]')
+    };
+    
+    res.status(201).json({ 
+      message: 'Question added successfully',
+      question: newQuestion
+    });
+  } catch (error) {
+    console.error('Error adding question:', error);
+    res.status(500).json({ error: 'Failed to add question', details: error.message });
+  }
 });
 // Admin route to delete a question
 app.delete('/api/admin/questions/:id', isAdmin, async (req, res) => {
