@@ -119,69 +119,92 @@ router.get('/stats/:userId', isAdmin, async (req, res) => {
 });
 
 // Get dashboard statistics
-router.get('/dashboard-stats', isAdmin, async (req, res) => {
+router.get('/stats', isAdmin, async (req, res) => {
   try {
-    // Get total users and active users
-    const [totalUsers, activeUsers] = await Promise.all([
-      db.any('SELECT COUNT(*) as count FROM users'),
-      db.any('SELECT COUNT(DISTINCT user_id) as count FROM user_quiz_attempts')
+    console.log('Fetching admin dashboard statistics...');
+    
+    const [
+      totalUsers,
+      activeUsers,
+      quizStats,
+      recentAttempts,
+      topScorers
+    ] = await Promise.all([
+      // Total users
+      db.one('SELECT COUNT(*) as count FROM users'),
+      
+      // Active users (taken quiz)
+      db.one('SELECT COUNT(DISTINCT user_id) as count FROM quiz_sessions WHERE completed = true'),
+      
+      // Quiz statistics
+      db.one(`
+        SELECT 
+          COUNT(*) as total_questions,
+          COALESCE(AVG(score), 0) as average_score,
+          COUNT(CASE WHEN completed = true THEN 1 END) as completed_attempts
+        FROM quiz_sessions
+      `),
+      
+      // Recent quiz attempts
+      db.any(`
+        SELECT 
+          u.id as "userId",
+          u.username,
+          qs.score,
+          qs.completed_at as "completedAt"
+        FROM quiz_sessions qs
+        JOIN users u ON u.id = qs.user_id
+        WHERE qs.completed = true
+        AND qs.completed_at >= NOW() - INTERVAL '7 days'
+        ORDER BY qs.completed_at DESC
+        LIMIT 5
+      `),
+      
+      // Top scorers
+      db.any(`
+        SELECT 
+          u.id as "userId",
+          u.username,
+          u.email,
+          qs.score,
+          qs.completed_at as "completedAt"
+        FROM users u
+        JOIN quiz_sessions qs ON u.id = qs.user_id
+        WHERE qs.completed = true
+        ORDER BY qs.score DESC, qs.completed_at DESC
+        LIMIT 5
+      `)
     ]);
     
-    // Get quiz statistics
-    const quizStats = await db.any(
-      `SELECT 
-        COUNT(*) as total_questions,
-        AVG(score) as average_score,
-        COUNT(CASE WHEN completed = true THEN 1 END) as completed_attempts
-      FROM user_quiz_attempts`
-    );
-    
-    // Get recent activity
-    const recentActivity = await db.any(
-      `SELECT 
-        u.id as userId,
-        u.username,
-        uqa.score,
-        uqa.completed_at as completedAt
-      FROM user_quiz_attempts uqa
-      JOIN users u ON u.id = uqa.user_id
-      WHERE uqa.completed = true
-      AND uqa.completed_at >= NOW() - INTERVAL '7 days'
-      ORDER BY uqa.completed_at DESC
-      LIMIT 5`
-    );
-
-    // Get top performers
-    const topPerformers = await db.any(
-      `SELECT 
-        u.id as userId,
-        u.username,
-        u.email,
-        uqa.score,
-        uqa.completed_at as completedAt
-      FROM users u
-      JOIN user_quiz_attempts uqa ON u.id = uqa.user_id
-      WHERE uqa.completed = true
-      ORDER BY uqa.score DESC
-      LIMIT 5`
-    );
-
+    console.log('Successfully fetched dashboard statistics');
     res.json({
       users: {
-        total: totalUsers[0].count,
-        active: activeUsers[0].count
+        total: totalUsers.count,
+        active: activeUsers.count
       },
       quizStats: {
-        totalQuestions: quizStats[0].total_questions,
-        averageScore: quizStats[0].average_score,
-        completedAttempts: quizStats[0].completed_attempts
+        totalQuestions: quizStats.total_questions,
+        averageScore: quizStats.average_score,
+        completedAttempts: quizStats.completed_attempts
       },
-      recentActivity,
-      topPerformers
+      recentActivity: recentAttempts,
+      topPerformers: topScorers
     });
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
+    console.error('Error fetching dashboard stats:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      table: error.table,
+      constraint: error.constraint
+    });
+    res.status(500).json({ 
+      error: 'Failed to fetch dashboard statistics',
+      message: error.message,
+      code: error.code
+    });
   }
 });
 
@@ -193,7 +216,7 @@ router.get('/insights-stats', isAdmin, async (req, res) => {
     
     // Get active users (users who have started at least one quiz)
     const [activeUsers] = await db.any(
-      'SELECT COUNT(DISTINCT user_id) as count FROM user_quiz_attempts'
+      'SELECT COUNT(DISTINCT user_id) as count FROM quiz_sessions'
     );
     
     // Get quiz completion statistics
@@ -202,20 +225,20 @@ router.get('/insights-stats', isAdmin, async (req, res) => {
         COUNT(*) as total_attempts,
         COUNT(CASE WHEN completed = true THEN 1 END) as completed_attempts,
         AVG(score) as average_score
-      FROM user_quiz_attempts`
+      FROM quiz_sessions`
     );
     
     // Get recent activity
     const recentActivity = await db.any(
       `SELECT 
-        uqa.user_id,
+        qs.user_id,
         u.username,
-        uqa.score,
-        uqa.completed_at
-      FROM user_quiz_attempts uqa
-      JOIN users u ON u.id = uqa.user_id
-      WHERE uqa.completed_at >= NOW() - INTERVAL '7 days'
-      ORDER BY uqa.completed_at DESC
+        qs.score,
+        qs.completed_at
+      FROM quiz_sessions qs
+      JOIN users u ON u.id = qs.user_id
+      WHERE qs.completed_at >= NOW() - INTERVAL '7 days'
+      ORDER BY qs.completed_at DESC
       LIMIT 10`
     );
 
@@ -225,12 +248,12 @@ router.get('/insights-stats', isAdmin, async (req, res) => {
         u.id,
         u.username,
         u.email,
-        uqa.score,
-        uqa.completed_at
+        qs.score,
+        qs.completed_at
       FROM users u
-      JOIN user_quiz_attempts uqa ON u.id = uqa.user_id
-      WHERE uqa.completed = true
-      ORDER BY uqa.score DESC
+      JOIN quiz_sessions qs ON u.id = qs.user_id
+      WHERE qs.completed = true
+      ORDER BY qs.score DESC
       LIMIT 5`
     );
 

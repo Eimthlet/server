@@ -6,13 +6,36 @@ const router = express.Router();
 
 // Get user's qualification status
 router.get('/', authenticateUser, async (req, res) => {
+  console.log('\n=== QUALIFICATION REQUEST STARTED ===');
+  console.log('Request Time:', new Date().toISOString());
+  
   try {
-    console.log('=== QUALIFICATION REQUEST STARTED ===');
-    console.log('User ID:', req.user.id);
-    const userId = req.user.id;
+    // Validate user ID
+    if (!req.user?.id) {
+      console.error('No user ID in request');
+      return res.status(400).json({
+        error: 'User ID is required',
+        hasAttempted: false,
+        isQualified: false
+      });
+    }
     
-    // Log database connection info
-    console.log('Database connection pool state:', db.$pool);
+    const userId = req.user.id;
+    console.log('Processing request for user ID:', userId);
+    
+    // Test database connection
+    try {
+      await db.one('SELECT 1 as test');
+      console.log('Database connection test successful');
+    } catch (dbTestError) {
+      console.error('Database connection test failed:', dbTestError);
+      return res.status(503).json({
+        error: 'Database connection error',
+        message: 'Unable to connect to the database',
+        hasAttempted: false,
+        isQualified: false
+      });
+    }
     
     // Check if tables exist with better error handling
     let tablesExist;
@@ -51,14 +74,55 @@ router.get('/', authenticateUser, async (req, res) => {
       });
     }
 
-    // First, get total number of questions
-    let totalQuestions;
     try {
-      console.log('Fetching total number of questions...');
-      const countQuery = 'SELECT COUNT(*) as count FROM questions';
-      console.log('Executing count query:', countQuery);
-      totalQuestions = await db.oneOrNone(countQuery);
-      console.log('Total questions result:', JSON.stringify(totalQuestions, null, 2));
+      const tablesExist = await db.oneOrNone(`
+        SELECT 
+          EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'questions') as questions_exist,
+          EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'quiz_sessions') as sessions_exist
+      `);
+      
+      console.log('Tables check result:', tablesExist);
+      
+      if (!tablesExist.questions_exist || !tablesExist.sessions_exist) {
+        const missingTables = [];
+        if (!tablesExist.questions_exist) missingTables.push('questions');
+        if (!tablesExist.sessions_exist) missingTables.push('quiz_sessions');
+        
+        console.error(`Missing required tables: ${missingTables.join(', ')}`);
+        return res.status(500).json({
+          error: 'Database not properly initialized',
+          message: `Missing required tables: ${missingTables.join(', ')}`,
+          hasAttempted: false,
+          isQualified: false
+        });
+      }
+    } catch (tableCheckError) {
+      console.error('Error checking table existence:', tableCheckError);
+      return res.status(500).json({
+        error: 'Database error',
+        message: 'Failed to verify database structure',
+        details: process.env.NODE_ENV === 'development' ? tableCheckError.message : undefined,
+        hasAttempted: false,
+        isQualified: false
+      });
+    }
+    
+    // Get total number of questions
+    console.log('Fetching total number of questions...');
+    let totalQuestions = 0;
+    try {
+      const countResult = await db.one('SELECT COUNT(*) as count FROM questions');
+      totalQuestions = parseInt(countResult.count, 10);
+      console.log(`Found ${totalQuestions} questions in the database`);
+      
+      if (totalQuestions === 0) {
+        console.warn('No questions found in the database');
+        return res.status(200).json({
+          hasAttempted: false,
+          isQualified: false,
+          message: 'No questions are available at this time.'
+        });
+      }
     } catch (countError) {
       console.error('Error counting questions:', countError);
       console.error('Error details:', {
@@ -97,71 +161,55 @@ router.get('/', authenticateUser, async (req, res) => {
         message: 'No questions available yet.'
       });
     }
-    
+
+    console.log(`Checking for quiz attempts for user ${userId}...`);
+    let attempt = null;
     try {
-      console.log('Checking for completed quiz attempts...');
-      let attempt;
-      try {
-        // First try to get a completed attempt
-        attempt = await db.oneOrNone(
-          `SELECT 
-            id, 
-            score, 
-            qualifies_for_next_round,
-            percentage_score,
-            $1::integer as total_questions
-          FROM 
-            quiz_sessions
-          WHERE 
-            user_id = $2 AND completed = true
-          ORDER BY 
-            completed_at DESC
-          LIMIT 1`,
-          [parseInt(totalQuestions.count, 10), userId]
-        );
-        console.log('Completed attempt found:', !!attempt);
-      } catch (attemptError) {
-        console.error('Error fetching completed attempt:', attemptError);
-        // Continue to check for any attempt
-      }
+      // First try to get a completed attempt
+      attempt = await db.oneOrNone(
+        `SELECT 
+          id, 
+          COALESCE(score, 0) as score,
+          COALESCE(qualifies_for_next_round, false) as qualifies_for_next_round,
+          COALESCE(percentage_score, 0) as percentage_score,
+          $1 as total_questions,
+          completed,
+          completed_at
+        FROM 
+          quiz_sessions
+        WHERE 
+          user_id = $2 
+          AND completed = true
+        ORDER BY 
+          completed_at DESC
+        LIMIT 1`,
+        [totalQuestions, userId]
+      );
+      
+      console.log('Completed attempt found:', attempt ? 'Yes' : 'No');
       
       // If no completed attempt, check for any attempt
       if (!attempt) {
         console.log('No completed attempts, checking for any attempts...');
-        try {
-          const anyAttempt = await db.oneOrNone(
-            `SELECT 
-              id, 
-              score,
-              $1::integer as total_questions
-            FROM 
-              quiz_sessions
-            WHERE 
-              user_id = $2
-            ORDER BY 
-              created_at DESC
-            LIMIT 1`,
-            [parseInt(totalQuestions.count, 10), userId]
-          );
-          
-          if (anyAttempt) {
-            console.log('Found incomplete attempt:', anyAttempt);
-            return res.json({
-              hasAttempted: true,
-              isQualified: false,
-              score: anyAttempt.score || 0,
-              totalQuestions: anyAttempt.total_questions || 0,
-              percentageScore: 0,
-              minimumRequired: Math.ceil((anyAttempt.total_questions || 0) * 0.5),
-              message: 'You have an incomplete attempt. Please complete the quiz to see if you qualify.'
-            });
-          }
-        } catch (anyAttemptError) {
-          console.error('Error checking for any attempts:', anyAttemptError);
-          // Continue to return no attempts
-        }
-
+        attempt = await db.oneOrNone(
+          `SELECT 
+            id, 
+            COALESCE(score, 0) as score,
+            $1 as total_questions,
+            COALESCE(completed, false) as completed
+          FROM 
+            quiz_sessions
+          WHERE 
+            user_id = $2
+          ORDER BY 
+            created_at DESC
+          LIMIT 1`,
+          [totalQuestions, userId]
+        );
+        console.log('Any attempt found:', attempt ? 'Yes' : 'No');
       }
+      
+
 
       if (!attempt) {
         // User has not taken the quiz yet
@@ -206,30 +254,15 @@ router.get('/', authenticateUser, async (req, res) => {
       code: error.code,
       detail: error.detail,
       hint: error.hint,
-      position: error.position,
-      internalPosition: error.internalPosition,
-      internalQuery: error.internalQuery,
-      where: error.where,
-      schema: error.schema,
       table: error.table,
-      column: error.column,
-      dataType: error.dataType,
-      constraint: error.constraint,
-      file: error.file,
-      line: error.line,
-      routine: error.routine
+      constraint: error.constraint
     });
     
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: 'Internal Server Error',
-      message: error.message,
+      message: 'An unexpected error occurred',
       code: error.code,
-      details: {
-        detail: error.detail,
-        hint: error.hint,
-        table: error.table,
-        constraint: error.constraint
-      }
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   } finally {
     console.log('=== QUALIFICATION REQUEST COMPLETED ===');
