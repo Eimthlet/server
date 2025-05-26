@@ -254,6 +254,7 @@ router.get('/insights-stats', isAdmin, async (req, res) => {
 // Get all questions
 router.get('/questions', isAdmin, async (req, res) => {
   try {
+    console.log('Fetching all questions...');
     const questions = await db.any(
       `SELECT 
         q.id,
@@ -271,10 +272,20 @@ router.get('/questions', isAdmin, async (req, res) => {
       ORDER BY q.id DESC`
     );
     
-    res.json(questions);
+    console.log(`Found ${questions.length} questions`);
+    
+    // Return in the expected format
+    res.json({
+      data: { questions },
+      message: 'Questions retrieved successfully'
+    });
+    
   } catch (error) {
     console.error('Error fetching questions:', error);
-    res.status(500).json({ error: 'Failed to fetch questions' });
+    res.status(500).json({ 
+      error: 'Failed to fetch questions',
+      details: error.message 
+    });
   }
 });
 
