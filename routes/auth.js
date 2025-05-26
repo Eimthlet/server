@@ -223,16 +223,42 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
       domain: process.env.COOKIE_DOMAIN || undefined
     };
     
-    // Set cookies
-    res.cookie('accessToken', token, {
+    // Add the Partitioned attribute as a string in the header directly
+    // This is because some versions of Express don't support the partitioned property
+    const cookieHeader = (name, value, options) => {
+      const cookieString = `${name}=${value}; Partitioned; ${Object.entries(options)
+        .map(([key, value]) => {
+          if (key === 'maxAge') {
+            return `Max-Age=${Math.floor(value / 1000)}`;
+          }
+          if (key === 'httpOnly') {
+            return 'HttpOnly';
+          }
+          if (key === 'sameSite') {
+            return `SameSite=${value}`;
+          }
+          return `${key.charAt(0).toUpperCase() + key.slice(1)}=${value}`;
+        })
+        .join('; ')}`;
+      return cookieString;
+    };
+    
+    // Set cookies with Partitioned attribute using headers directly
+    const accessTokenOptions = {
       ...cookieOptions,
       maxAge: 60 * 60 * 1000 // 1 hour
-    });
+    };
     
-    res.cookie('refreshToken', refreshToken, {
+    const refreshTokenOptions = {
       ...cookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+    };
+    
+    // Set cookies using headers to ensure Partitioned attribute is properly set
+    res.setHeader('Set-Cookie', [
+      cookieHeader('accessToken', token, accessTokenOptions),
+      cookieHeader('refreshToken', refreshToken, refreshTokenOptions)
+    ]);
 
     res.json({
       success: true,

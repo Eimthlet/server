@@ -84,15 +84,47 @@ router.get('/', authenticateUser, async (req, res) => {
       });
     }
 
-    const formattedQuestions = questions.map(q => ({
-      id: q.id,
-      question: q.question,
-      options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
-      correctAnswer: q.correct_answer, // Note: Using correct_answer instead of correctAnswer
-      category: q.category,
-      difficulty: q.difficulty,
-      seasonId: q.season_id
-    }));
+    const formattedQuestions = questions.map(q => {
+      try {
+        // Safely parse options with error handling
+        let parsedOptions = [];
+        if (q.options) {
+          if (typeof q.options === 'string') {
+            try {
+              parsedOptions = JSON.parse(q.options);
+            } catch (parseError) {
+              console.error(`Error parsing options for question ${q.id}:`, parseError);
+              // Fallback to empty array if parsing fails
+              parsedOptions = [];
+            }
+          } else if (Array.isArray(q.options)) {
+            parsedOptions = q.options;
+          }
+        }
+        
+        return {
+          id: q.id,
+          question: q.question || 'Question unavailable',
+          options: parsedOptions,
+          correctAnswer: q.correct_answer || '', // Using correct_answer instead of correctAnswer
+          category: q.category || 'General',
+          difficulty: q.difficulty || 'Medium',
+          seasonId: q.season_id
+        };
+      } catch (err) {
+        console.error(`Error formatting question ${q.id}:`, err);
+        // Return a default question object if formatting fails
+        return {
+          id: q.id || 0,
+          question: 'Error loading question',
+          options: [],
+          correctAnswer: '',
+          category: 'Error',
+          difficulty: 'Medium',
+          seasonId: q.season_id
+        };
+      }
+    });
 
     console.log('Sending questions response', {
       questionCount: formattedQuestions.length,
@@ -115,10 +147,17 @@ router.get('/', authenticateUser, async (req, res) => {
       errorStack: error.stack,
       timestamp: new Date().toISOString()
     });
+    
+    // Return a user-friendly error message
     res.status(500).json({ 
       error: 'Failed to load questions', 
-      message: error.message,
-      details: 'An unexpected error occurred while fetching questions'
+      message: 'We encountered an issue loading the quiz questions. Please try again later.',
+      code: 'QUESTIONS_LOAD_ERROR',
+      // Only include technical details in non-production environments
+      ...(process.env.NODE_ENV !== 'production' && { 
+        details: error.message,
+        stack: error.stack
+      })
     });
   }
 });

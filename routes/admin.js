@@ -577,4 +577,79 @@ router.put('/rounds/:id', isAdmin, asyncHandler(async (req, res) => {
   }
 }));
 
+// Add dashboard statistics endpoint
+router.get('/dashboard-stats', isAdmin, asyncHandler(async (req, res) => {
+  try {
+    // Get total users count
+    const totalUsersResult = await db.one('SELECT COUNT(*) as count FROM users');
+    const totalUsers = parseInt(totalUsersResult.count, 10);
+    
+    // Get total questions count
+    const totalQuestionsResult = await db.one('SELECT COUNT(*) as count FROM questions');
+    const totalQuestions = parseInt(totalQuestionsResult.count, 10);
+    
+    // Get total quiz attempts
+    const totalAttemptsResult = await db.one('SELECT COUNT(*) as count FROM user_quiz_attempts');
+    const totalAttempts = parseInt(totalAttemptsResult.count, 10);
+    
+    // Get average score
+    const avgScoreResult = await db.oneOrNone('SELECT AVG(score) as avg_score FROM user_quiz_attempts WHERE completed = true');
+    const avgScore = avgScoreResult ? parseFloat(avgScoreResult.avg_score) || 0 : 0;
+    
+    // Get count of users by registration date (last 7 days)
+    const usersByDateResult = await db.any(`
+      SELECT 
+        DATE(created_at) as date, 
+        COUNT(*) as count 
+      FROM users 
+      WHERE created_at >= NOW() - INTERVAL '7 days' 
+      GROUP BY DATE(created_at) 
+      ORDER BY date ASC
+    `);
+    
+    // Get count of quiz attempts by date (last 7 days)
+    const attemptsByDateResult = await db.any(`
+      SELECT 
+        DATE(started_at) as date, 
+        COUNT(*) as count 
+      FROM user_quiz_attempts 
+      WHERE started_at >= NOW() - INTERVAL '7 days' 
+      GROUP BY DATE(started_at) 
+      ORDER BY date ASC
+    `);
+    
+    // Return all statistics
+    res.json({
+      totalUsers,
+      totalQuestions,
+      totalAttempts,
+      avgScore,
+      usersByDate: usersByDateResult,
+      attemptsByDate: attemptsByDateResult,
+      // Add default data if any of the queries returned empty results
+      ...(usersByDateResult.length === 0 && { 
+        usersByDate: Array.from({ length: 7 }, (_, i) => {
+          const date = new Date();
+          date.setDate(date.getDate() - (6 - i));
+          return { date: date.toISOString().split('T')[0], count: 0 };
+        })
+      }),
+      ...(attemptsByDateResult.length === 0 && { 
+        attemptsByDate: Array.from({ length: 7 }, (_, i) => {
+          const date = new Date();
+          date.setDate(date.getDate() - (6 - i));
+          return { date: date.toISOString().split('T')[0], count: 0 };
+        })
+      })
+    });
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({
+      error: 'Failed to fetch dashboard statistics',
+      message: 'An error occurred while retrieving dashboard data',
+      code: 'DASHBOARD_STATS_ERROR'
+    });
+  }
+}));
+
 export default router;
