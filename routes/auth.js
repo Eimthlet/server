@@ -239,20 +239,20 @@ await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($
     res.cookie('accessToken', token, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'lax',
-      partitioned: true,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 60 * 60 * 1000, // 1 hour
-      path: '/'
+      path: '/',
+      domain: process.env.COOKIE_DOMAIN || undefined
     });
     
     // Set refresh token cookie
     res.cookie('refreshToken', newRefreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'lax',
-      partitioned: true,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/'
+      path: '/',
+      domain: process.env.COOKIE_DOMAIN || undefined
     });
     
     // Also send tokens in the response body
