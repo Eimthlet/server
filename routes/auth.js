@@ -212,8 +212,8 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     // Set HTTP-only cookies
     const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: true, // Always use secure cookies
+      sameSite: 'none', // Always use sameSite=none for cross-site requests
       path: '/',
       domain: process.env.COOKIE_DOMAIN || undefined
     };
@@ -292,11 +292,10 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   );
 
   // Set HTTP-only cookies for both tokens
-  const isProduction = process.env.NODE_ENV === 'production';
   const cookieOptions = {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
+    secure: true, // Always use secure cookies
+    sameSite: 'none', // Always use sameSite=none for cross-site requests
     path: '/',
     domain: process.env.COOKIE_DOMAIN || undefined,
     maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
@@ -374,8 +373,8 @@ router.post('/logout', asyncHandler(async (req, res) => {
   // Clear all auth cookies
   const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: true, // Always use secure cookies
+    sameSite: 'none', // Always use sameSite=none for cross-site requests
     path: '/',
     domain: process.env.COOKIE_DOMAIN || undefined
   };

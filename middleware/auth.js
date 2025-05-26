@@ -5,8 +5,8 @@ import cookie from 'cookie';
 // Configure cookie options
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: true, // Always use secure cookies
+  sameSite: 'none', // Always use sameSite=none for cross-site requests
   path: '/',
   maxAge: 24 * 60 * 60 * 1000 // 24 hours
 };
@@ -15,21 +15,19 @@ const cookieOptions = {
  * Middleware to verify if user is authenticated
  */
 export const authenticateUser = (req, res, next) => {
-  // Handle cookie-based authentication
-  const authHeader = req.headers.authorization || req.cookies.token;
-
-  if (!authHeader) {
-    return res.status(401).json({ 
-      error: 'Unauthorized', 
-      details: 'No authorization header or cookie provided' 
-    });
-  }
-
-  // If token is in cookie, extract it
-  let token = authHeader;
-  if (req.cookies.token) {
-    token = req.cookies.token;
-  } else {
+  // First check for the accessToken cookie, then fall back to Authorization header
+  let token = req.cookies.accessToken;
+  
+  // If no cookie, try the Authorization header
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ 
+        error: 'Unauthorized', 
+        details: 'No authentication token provided' 
+      });
+    }
+    
     const tokenParts = authHeader.split(' ');
     if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
       return res.status(401).json({ 
@@ -39,25 +37,9 @@ export const authenticateUser = (req, res, next) => {
     }
     token = tokenParts[1];
   }
+  
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader) {
-      return res.status(401).json({ 
-        error: 'Unauthorized', 
-        details: 'No authorization header provided' 
-      });
-    }
-
-    const tokenParts = authHeader.split(' ');
-    if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-      return res.status(401).json({ 
-        error: 'Invalid Authorization', 
-        details: 'Authorization header must be in format: Bearer <token>' 
-      });
-    }
-
-    const token = tokenParts[1];
+    // Verify the token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Check token expiration
@@ -93,24 +75,29 @@ export const authenticateUser = (req, res, next) => {
  */
 export const isAdmin = (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader) {
-      return res.status(401).json({ 
-        error: 'Unauthorized', 
-        details: 'No authorization header provided' 
-      });
+    // First check for the accessToken cookie, then fall back to Authorization header
+    let token = req.cookies.accessToken;
+    
+    // If no cookie, try the Authorization header
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ 
+          error: 'Unauthorized', 
+          details: 'No authentication token provided' 
+        });
+      }
+      
+      const tokenParts = authHeader.split(' ');
+      if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
+        return res.status(401).json({ 
+          error: 'Invalid Authorization', 
+          details: 'Authorization header must be in format: Bearer <token>' 
+        });
+      }
+      token = tokenParts[1];
     }
-
-    const tokenParts = authHeader.split(' ');
-    if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-      return res.status(401).json({ 
-        error: 'Invalid Authorization', 
-        details: 'Authorization header must be in format: Bearer <token>' 
-      });
-    }
-
-    const token = tokenParts[1];
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Check token expiration
@@ -154,9 +141,21 @@ export const isAdmin = (req, res, next) => {
  */
 export const checkDisqualification = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
+    // First check for the accessToken cookie, then fall back to Authorization header
+    let token = req.cookies.accessToken;
+    
+    // If no cookie, try the Authorization header
     if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ error: 'No authentication token provided' });
+      }
+      
+      const tokenParts = authHeader.split(' ');
+      if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
+        return res.status(401).json({ error: 'Invalid authorization format' });
+      }
+      token = tokenParts[1];
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
