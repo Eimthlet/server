@@ -5,14 +5,51 @@ import fetch from 'node-fetch';
 
 const router = express.Router();
 
-// Accept both GET and POST for PayChangu callback
-router.all('/paychangu-callback', async (req, res) => {
-  const tx_ref = req.body.tx_ref || req.query.tx_ref;
-  if (!tx_ref) {
-    return res.status(400).json({ error: 'Missing tx_ref' });
-  }
-
+// Handle GET requests for PayChangu callback at both root and /api/auth paths
+const paychanguCallback = async (req, res) => {
+  const logData = {
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    url: req.originalUrl,
+    path: req.path,
+    query: req.query,
+    body: req.body,
+    headers: {
+      'content-type': req.headers['content-type'],
+      'user-agent': req.headers['user-agent'],
+      'x-forwarded-for': req.headers['x-forwarded-for']
+    },
+    ip: req.ip
+  };
+  
+  console.log('=== PAYCHANGU CALLBACK RECEIVED ===');
+  console.log(JSON.stringify(logData, null, 2));
+  console.log('===================================');
+  
   try {
+    await handlePayChanguCallback(req, res);
+  } catch (error) {
+    console.error('Error in paychanguCallback:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Register routes for both GET and POST at both paths
+['/', '/api/auth/'].forEach(path => {
+  router.get(`${path}paychangu-callback`, paychanguCallback);
+  router.post(`${path}paychangu-callback`, paychanguCallback);
+});
+
+// Main callback handler function
+async function handlePayChanguCallback(req, res) {
+  try {
+    const tx_ref = req.body.tx_ref || req.query.tx_ref;
+    if (!tx_ref) {
+      return res.status(400).json({ error: 'Missing tx_ref' });
+    }
     // 1. Verify payment with PayChangu
     // Use the correct API endpoint from PayChangu documentation
     const verifyUrl = `https://api.paychangu.com/verify-payment/${tx_ref}`;
@@ -134,8 +171,11 @@ router.all('/paychangu-callback', async (req, res) => {
     }
   } catch (error) {
     console.error('PayChangu callback error:', error);
-    res.status(500).json({ error: 'Could not complete registration', details: error.message });
+    res.status(500).json({ 
+      error: 'Could not complete registration',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
-});
+}
 
 export default router;

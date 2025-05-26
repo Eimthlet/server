@@ -113,9 +113,11 @@ app.get('/api/health', (req, res) => {
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
-// Mount PayChangu routes at both root and API level to ensure callbacks work
+// Mount PayChangu routes at the root level to ensure callbacks work
+// The routes are already handling both / and /api/auth paths internally
 app.use('/', paychanguRoutes);
-app.use('/api/auth', paychanguRoutes);
+
+// Mount admin routes
 app.use('/api/admin', isAdmin, adminRoutes);
 app.use('/api/admin/quiz', isAdmin, adminQuizRoutes);
 app.use('/api/admin/seasons', isAdmin, adminSeasonsRoutes);
