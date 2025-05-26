@@ -164,16 +164,14 @@ router.post(['/login', '/api/auth/login'], async (req, res) => {
       secure: isProduction,
       sameSite: isProduction ? 'none' : 'lax',
       path: '/',
-      domain: process.env.COOKIE_DOMAIN || undefined
+      domain: process.env.COOKIE_DOMAIN || undefined,
+      maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
     };
     
     // Set access token cookie
-    res.cookie('accessToken', token, {
-      ...cookieOptions,
-      maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
-    });
+    res.cookie('accessToken', token, cookieOptions);
     
-    // Set refresh token cookie
+    // Set refresh token cookie with longer expiration
     res.cookie('refreshToken', refreshToken, {
       ...cookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
@@ -233,23 +231,21 @@ await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($
       JWT_SECRET
     );
 
-    // Set HTTP-only cookies for both tokens, just like in the login endpoint
+    // Set HTTP-only cookies for both tokens
     const isProduction = process.env.NODE_ENV === 'production';
     const cookieOptions = {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? 'none' : 'lax',
       path: '/',
-      domain: process.env.COOKIE_DOMAIN || undefined
+      domain: process.env.COOKIE_DOMAIN || undefined,
+      maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
     };
     
     // Set access token cookie
-    res.cookie('accessToken', token, {
-      ...cookieOptions,
-      maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
-    });
+    res.cookie('accessToken', token, cookieOptions);
     
-    // Set refresh token cookie
+    // Set refresh token cookie with longer expiration
     res.cookie('refreshToken', newRefreshToken, {
       ...cookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
