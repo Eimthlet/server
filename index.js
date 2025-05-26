@@ -38,34 +38,9 @@ if (process.env.NODE_ENV !== 'production') {
 // Middleware
 const corsOptions = {
   origin: function(origin, callback) {
-    const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
-      'https://car-quizz.vercel.app',
-      'https://car-quizz-frontend.vercel.app',
-      'https://car-quizz-eimthlet.vercel.app',
-      'https://front-eimthlet.vercel.app',
-      'https://front-git-main-eimthlet.vercel.app',
-      'https://car-quizz.onrender.com',
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:4000',
-      'http://localhost:4001',
-      'http://localhost:4002',
-      'http://localhost:4003',
-      'http://localhost:4004',
-      'http://localhost:4005'
-    ];
-    
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, {
-        origin: true,
-        credentials: true
-      });
-    } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
+    // When credentials is true, we can't use wildcard origin
+    // Instead, we need to specify the exact origin or set it to the request origin
+    callback(null, origin || true);
   },
   credentials: true,
   exposedHeaders: ['X-XSRF-TOKEN'],
@@ -85,10 +60,16 @@ app.use((req, res, next) => {
   if (origin) {
     // Only set specific origin, not wildcard when credentials are used
     res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-access-token');
   }
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-access-token');
+  
+  // Handle preflight OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   next();
 });
 
