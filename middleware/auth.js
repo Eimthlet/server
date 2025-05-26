@@ -1,10 +1,44 @@
 import jwt from 'jsonwebtoken';
 import db from '../config/database.js';
+import cookie from 'cookie';
+
+// Configure cookie options
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/',
+  maxAge: 24 * 60 * 60 * 1000 // 24 hours
+};
 
 /**
  * Middleware to verify if user is authenticated
  */
 export const authenticateUser = (req, res, next) => {
+  // Handle cookie-based authentication
+  const authHeader = req.headers.authorization || req.cookies.token;
+
+  if (!authHeader) {
+    return res.status(401).json({ 
+      error: 'Unauthorized', 
+      details: 'No authorization header or cookie provided' 
+    });
+  }
+
+  // If token is in cookie, extract it
+  let token = authHeader;
+  if (req.cookies.token) {
+    token = req.cookies.token;
+  } else {
+    const tokenParts = authHeader.split(' ');
+    if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
+      return res.status(401).json({ 
+        error: 'Invalid Authorization', 
+        details: 'Authorization header must be in format: Bearer <token>' 
+      });
+    }
+    token = tokenParts[1];
+  }
   try {
     const authHeader = req.headers.authorization;
 

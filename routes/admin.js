@@ -118,6 +118,73 @@ router.get('/stats/:userId', isAdmin, async (req, res) => {
   }
 });
 
+// Get dashboard statistics
+router.get('/dashboard-stats', isAdmin, async (req, res) => {
+  try {
+    // Get total users and active users
+    const [totalUsers, activeUsers] = await Promise.all([
+      db.any('SELECT COUNT(*) as count FROM users'),
+      db.any('SELECT COUNT(DISTINCT user_id) as count FROM user_quiz_attempts')
+    ]);
+    
+    // Get quiz statistics
+    const quizStats = await db.any(
+      `SELECT 
+        COUNT(*) as total_questions,
+        AVG(score) as average_score,
+        COUNT(CASE WHEN completed = true THEN 1 END) as completed_attempts
+      FROM user_quiz_attempts`
+    );
+    
+    // Get recent activity
+    const recentActivity = await db.any(
+      `SELECT 
+        u.id as userId,
+        u.username,
+        uqa.score,
+        uqa.completed_at as completedAt
+      FROM user_quiz_attempts uqa
+      JOIN users u ON u.id = uqa.user_id
+      WHERE uqa.completed = true
+      AND uqa.completed_at >= NOW() - INTERVAL '7 days'
+      ORDER BY uqa.completed_at DESC
+      LIMIT 5`
+    );
+
+    // Get top performers
+    const topPerformers = await db.any(
+      `SELECT 
+        u.id as userId,
+        u.username,
+        u.email,
+        uqa.score,
+        uqa.completed_at as completedAt
+      FROM users u
+      JOIN user_quiz_attempts uqa ON u.id = uqa.user_id
+      WHERE uqa.completed = true
+      ORDER BY uqa.score DESC
+      LIMIT 5`
+    );
+
+    res.json({
+      users: {
+        total: totalUsers[0].count,
+        active: activeUsers[0].count
+      },
+      quizStats: {
+        totalQuestions: quizStats[0].total_questions,
+        averageScore: quizStats[0].average_score,
+        completedAttempts: quizStats[0].completed_attempts
+      },
+      recentActivity,
+      topPerformers
+    });
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
+  }
+});
+
 // Get comprehensive insights and statistics
 router.get('/insights-stats', isAdmin, async (req, res) => {
   try {
@@ -181,6 +248,32 @@ router.get('/insights-stats', isAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching insights stats:', error);
     res.status(500).json({ error: 'Failed to fetch insights statistics' });
+  }
+});
+
+// Get all questions
+router.get('/questions', isAdmin, async (req, res) => {
+  try {
+    const questions = await db.any(
+      `SELECT 
+        q.id,
+        q.question,
+        q.options,
+        q.correct_answer as correctAnswer,
+        q.time_limit as timeLimit,
+        q.category,
+        q.difficulty,
+        COUNT(a.id) as attempts
+      FROM questions q
+      LEFT JOIN quiz_attempts a ON q.id = a.question_id
+      GROUP BY q.id
+      ORDER BY q.id DESC`
+    );
+    
+    res.json(questions);
+  } catch (error) {
+    console.error('Error fetching questions:', error);
+    res.status(500).json({ error: 'Failed to fetch questions' });
   }
 });
 
