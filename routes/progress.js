@@ -6,22 +6,22 @@ const router = express.Router();
 
 // Start or continue a quiz attempt
 router.post('/', authenticateUser, async (req, res) => {
-  const userId = req.user.id;
-  // Handle both formats: {questionId, answer} or {userId, score, total}
-  const { questionId, answer, score, total } = req.body;
-  
-  console.log('Progress POST request received:', {
-    userId,
-    requestBody: req.body,
-    questionId,
-    answer,
-    score,
-    total
-  });
+  try {
+    const userId = req.user.id;
+    // Handle both formats: {questionId, answer} or {userId, score, total}
+    const { questionId, answer, score, total } = req.body;
+    
+    console.log('Progress POST request received:', {
+      userId,
+      requestBody: req.body,
+      questionId,
+      answer,
+      score,
+      total
+    });
 
-  // Handle quiz completion (from App.tsx)
-  if (score !== undefined && total !== undefined) {
-    try {
+    // Handle quiz completion (from App.tsx)
+    if (score !== undefined && total !== undefined) {
       // Check if the user already has an attempt
       let attempt = await db.oneOrNone(
         'SELECT * FROM user_quiz_attempts WHERE user_id = $1',
@@ -31,14 +31,20 @@ router.post('/', authenticateUser, async (req, res) => {
       if (!attempt) {
         // Create a new attempt if none exists
         attempt = await db.one(
-          'INSERT INTO user_quiz_attempts (user_id, score, completed, completed_at) VALUES ($1, $2, true, CURRENT_TIMESTAMP) RETURNING *',
-          [userId, score]
+          `INSERT INTO user_quiz_attempts 
+           (user_id, score, completed, completed_at, qualifies_for_next_round, percentage_score) 
+           VALUES ($1, $2, true, CURRENT_TIMESTAMP, $3, $4) 
+           RETURNING *`,
+          [userId, score, score >= Math.ceil(total / 2), Math.round((score / total) * 100)]
         );
       } else {
         // Update existing attempt
         await db.none(
-          'UPDATE user_quiz_attempts SET score = $1, completed = true, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
-          [score, attempt.id]
+          `UPDATE user_quiz_attempts 
+           SET score = $1, completed = true, completed_at = CURRENT_TIMESTAMP,
+           qualifies_for_next_round = $2, percentage_score = $3
+           WHERE id = $4`,
+          [score, score >= Math.ceil(total / 2), Math.round((score / total) * 100), attempt.id]
         );
       }
 
@@ -53,19 +59,14 @@ router.post('/', authenticateUser, async (req, res) => {
         minimumScoreRequired: Math.ceil(total / 2),
         percentageScore: Math.round((score / total) * 100)
       });
-    } catch (error) {
-      console.error('Error recording quiz completion:', error);
-      return res.status(500).json({ error: 'Could not record quiz completion' });
     }
-  }
 
-  // Handle individual question answer (original flow)
-  if (!questionId) {
-    console.log('Error: Missing questionId in request');
-    return res.status(400).json({ error: 'Question ID is required' });
-  }
+    // Handle individual question answer (original flow)
+    if (!questionId) {
+      console.log('Error: Missing questionId in request');
+      return res.status(400).json({ error: 'Question ID is required' });
+    }
 
-  try {
     // Check if the user already has a completed attempt
     const existingCompletedAttempt = await db.oneOrNone(
       'SELECT * FROM user_quiz_attempts WHERE user_id = $1 AND completed = true',
@@ -192,7 +193,10 @@ router.post('/', authenticateUser, async (req, res) => {
     });
   } catch (error) {
     console.error('Error recording quiz progress:', error);
-    res.status(500).json({ error: 'Could not record quiz progress' });
+    res.status(500).json({ 
+      error: 'Could not record quiz progress',
+      details: error.message || 'Unknown error'
+    });
   }
 });
 

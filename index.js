@@ -116,7 +116,7 @@ app.use('/api/questions', questionsRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/results', resultsRoutes);
 app.use('/api/progress', progressRoutes);
-app.use('/api/results/leaderboard', leaderboardRoutes);
+app.use('/api/leaderboard', leaderboardRoutes); // Changed from /api/results/leaderboard
 app.use('/api/qualification', qualificationRoutes);
 
 // 404 Handler for API routes
@@ -127,41 +127,9 @@ app.use('/api/*', (req, res) => {
 // Global error handler middleware
 app.use(errorHandler);
 
-// Progress endpoint (moved from auth routes)
-app.post("/api/progress", async (req, res) => {
-  const { userId, score, total } = req.body;
-  if (!userId || score == null || total == null) {
-    return res.status(400).json({ error: "userId, score, total required" });
-  }
-  
-  try {
-    const result = await db.one(
-      'INSERT INTO progress (user_id, score, total) VALUES ($1, $2, $3) RETURNING id',
-      [userId, score, total]
-    );
-    res.json({ success: true, id: result.id });
-  } catch (error) {
-    console.error('Error adding progress:', error);
-    res.status(500).json({ error: 'Failed to add progress' });
-  }
-});
-
-// Leaderboard endpoint: Top users by highest score
-app.get("/api/results/leaderboard", async (req, res) => {
-  try {
-    const leaderboard = await db.any(`
-      SELECT u.id, u.username, MAX(p.score) as max_score, COUNT(p.id) as games_played
-      FROM users u
-      JOIN progress p ON u.id = p.user_id
-      GROUP BY u.id, u.username
-      ORDER BY max_score DESC, games_played DESC
-      LIMIT 20
-    `);
-    res.json({ leaderboard });
-  } catch (error) {
-    console.error('Leaderboard error:', error);
-    res.status(500).json({ error: 'Failed to fetch leaderboard' });
-  }
+// Start server
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
 
 // Insights statistics endpoint

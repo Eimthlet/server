@@ -326,9 +326,9 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   const cookieOptions = {
     httpOnly: true,
     secure: true, // Always use secure cookies
-    sameSite: 'none', // Always use sameSite=none for cross-site requests
+    sameSite: 'Strict', // Use Strict for better security
     path: '/',
-    domain: process.env.COOKIE_DOMAIN || undefined,
+    partitioned: true, // Add partitioning for cross-site cookies
     maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
   };
   
