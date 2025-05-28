@@ -197,12 +197,16 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
       });
     }
 
-    // Create JWT payload
+    // Create JWT payload with both isAdmin and role for backward compatibility
+    const isAdmin = user.role === 'admin';
     const payload = {
       id: user.id,
       email: user.email,
-      isAdmin: user.role === 'admin'
+      isAdmin: isAdmin,
+      role: user.role || 'user' // Include the role field
     };
+    
+    console.log('JWT payload created:', payload);
 
     // Generate tokens
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
@@ -230,15 +234,20 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     ]);
 
     // Also include tokens in the response body for the frontend to use
+    const userResponse = {
+      id: user.id,
+      email: user.email,
+      isAdmin: isAdmin,
+      role: user.role || 'user'
+    };
+    
+    console.log('Login successful, responding with user:', userResponse);
+    
     res.json({
       success: true,
       token: token,
       refreshToken: refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        isAdmin: user.role === 'admin'
-      }
+      user: userResponse
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -279,25 +288,32 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   const user = {
     id: tokenRecord.user_id,
     email: tokenRecord.email,
-    role: tokenRecord.role
+    role: tokenRecord.role || 'user'
   };
+  
+  const isAdmin = user.role === 'admin';
+  console.log('Refreshing token for user:', { ...user, isAdmin });
 
   const newRefreshToken = generateRefreshToken();
 
   // Update refresh token in the database
   await db.none('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
   const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-  await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, newRefreshToken, refreshExpiresAt]);
-
-  const token = jwt.sign(
-    { 
-      id: user.id, 
-      email: user.email, 
-      isAdmin: user.role === 'admin',
-      exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
-    }, 
-    JWT_SECRET
+  await db.none('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', 
+    [user.id, newRefreshToken, refreshExpiresAt]
   );
+
+  // Create JWT payload with both isAdmin and role for backward compatibility
+  const payload = {
+    id: user.id,
+    email: user.email,
+    isAdmin: isAdmin,
+    role: user.role,
+    exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
+  };
+  
+  console.log('New JWT payload:', payload);
+  const token = jwt.sign(payload, JWT_SECRET);
 
   // Set HTTP-only cookies for both tokens
   // Simplified cookie header function that works better with cross-origin requests
@@ -314,16 +330,22 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
     cookieHeader('refreshToken', newRefreshToken, refreshTokenMaxAge)
   ]);
   
+  // Prepare user response with role information
+  const userResponse = {
+    id: user.id,
+    email: user.email,
+    isAdmin: isAdmin,
+    role: user.role
+  };
+  
+  console.log('Token refresh successful, responding with user:', userResponse);
+  
   // Also send tokens in the response body along with user info
   res.json({
     success: true,
     token,
     refreshToken: newRefreshToken,
-    user: {
-      id: user.id,
-      email: user.email,
-      isAdmin: user.role === 'admin'
-    }
+    user: userResponse
   });
 }));
 
@@ -354,14 +376,20 @@ router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, r
       });
     }
     
+    const isAdmin = user.role === 'admin';
+    const userResponse = {
+      id: user.id,
+      email: user.email,
+      isAdmin: isAdmin,
+      role: user.role || 'user'
+    };
+    
+    console.log('Token check successful, responding with user:', userResponse);
+    
     res.json({
       success: true,
       valid: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        isAdmin: user.role === 'admin'
-      }
+      user: userResponse
     });
   } catch (err) {
     console.log('Token validation error:', {

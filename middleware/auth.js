@@ -120,14 +120,19 @@ export const isAdmin = (req, res, next) => {
       });
     }
 
-    // Check admin status
-    if (!decoded.isAdmin) {
+    // Check admin status - check both isAdmin and role for backward compatibility
+    const isAdminUser = decoded.isAdmin || (decoded.role && decoded.role.toLowerCase() === 'admin');
+    if (!isAdminUser) {
+      console.log('Access denied - User is not an admin. User role:', decoded.role);
       return res.status(403).json({ 
         error: 'Access restricted', 
         details: 'This area is only accessible to administrators.',
-        code: 'ADMIN_REQUIRED'
+        code: 'ADMIN_REQUIRED',
+        userRole: decoded.role || 'not set'
       });
     }
+    
+    console.log('Admin access granted for user:', decoded.email, 'Role:', decoded.role);
 
     // Attach user to request
     req.user = decoded;
