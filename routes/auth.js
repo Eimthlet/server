@@ -248,8 +248,13 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
 
 // Refresh token endpoint
 router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => {
-  // Get refresh token from cookie instead of request body
-  const refreshToken = req.cookies.refreshToken;
+  // Get refresh token from cookie or request body
+  let refreshToken = req.cookies.refreshToken;
+  
+  // If not in cookies, check request body
+  if (!refreshToken && req.body.refreshToken) {
+    refreshToken = req.body.refreshToken;
+  }
 
   if (!refreshToken) {
     return res.status(401).json({ 
