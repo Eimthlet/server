@@ -122,7 +122,7 @@ app.use('/', paychanguRoutes);
 app.use('/api/admin', isAdmin, adminRoutes);
 app.use('/api/admin/quiz', isAdmin, adminQuizRoutes);
 app.use('/api/admin/seasons', isAdmin, adminSeasonsRoutes);
-app.use('/api/admin/users', adminUsersRoutes); // New admin users route
+app.use('/api/admin/users', isAdmin, adminUsersRoutes); // New admin users route
 app.use('/api/admin/migrations', isAdmin, migrationsRoutes); // Migrations route for database updates
 app.use('/api/questions', questionsRoutes);
 app.use('/api/quiz', quizRoutes);
