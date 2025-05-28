@@ -39,6 +39,7 @@ if (process.env.NODE_ENV !== 'production') {
 const allowedOrigins = [
   'https://car-quizz-jonathans-projects-8c96c19b.vercel.app',
   'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
+  'https://car-quizz.vercel.app',
   'http://localhost:3000',  // For local development
   'http://localhost:5000'   // For local development
 ];
@@ -50,8 +51,8 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // Check if the origin is allowed
-    if (allowedOrigins.includes(origin)) {
+    // Allow all Vercel domains and localhost
+    if (origin.endsWith('vercel.app') || origin.includes('localhost')) {
       callback(null, origin);
     } else {
       console.log('Origin not allowed by CORS:', origin);
@@ -60,8 +61,9 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'Origin', 'Accept', 'X-Requested-With'],
-  exposedHeaders: ['X-XSRF-TOKEN']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'Origin', 'Accept', 'X-Requested-With', 'Cookie'],
+  exposedHeaders: ['Set-Cookie', 'X-XSRF-TOKEN'],
+  maxAge: 86400 // 24 hours
 };
 
 // Apply CORS configuration
