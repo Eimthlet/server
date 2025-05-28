@@ -15,27 +15,23 @@ const cookieOptions = {
  * Middleware to verify if user is authenticated
  */
 export const authenticateUser = (req, res, next) => {
-  // First check for the accessToken cookie, then fall back to Authorization header
-  let token = req.cookies.accessToken;
+  // First check for Authorization header, then fall back to cookie
+  let token;
   
-  // If no cookie, try the Authorization header
+  // Try the Authorization header first
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1]; // Bearer TOKEN format
+  } else {
+    // Fall back to cookie
+    token = req.cookies.accessToken;
+  }
+  
   if (!token) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ 
-        error: 'Unauthorized', 
-        details: 'No authentication token provided' 
-      });
-    }
-    
-    const tokenParts = authHeader.split(' ');
-    if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-      return res.status(401).json({ 
-        error: 'Invalid Authorization', 
-        details: 'Authorization header must be in format: Bearer <token>' 
-      });
-    }
-    token = tokenParts[1];
+    return res.status(401).json({ 
+      error: 'Unauthorized', 
+      details: 'No authentication token provided' 
+    });
   }
   
   try {

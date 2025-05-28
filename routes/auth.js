@@ -229,8 +229,11 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
       cookieHeader('refreshToken', refreshToken, refreshTokenMaxAge)
     ]);
 
+    // Also include tokens in the response body for the frontend to use
     res.json({
       success: true,
+      token: token,
+      refreshToken: refreshToken,
       user: {
         id: user.id,
         email: user.email,
@@ -306,11 +309,16 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
     cookieHeader('refreshToken', newRefreshToken, refreshTokenMaxAge)
   ]);
   
-  // Also send tokens in the response body
+  // Also send tokens in the response body along with user info
   res.json({
     success: true,
     token,
-    refreshToken: newRefreshToken
+    refreshToken: newRefreshToken,
+    user: {
+      id: user.id,
+      email: user.email,
+      isAdmin: user.role === 'admin'
+    }
   });
 }));
 
