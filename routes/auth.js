@@ -474,20 +474,20 @@ router.post(['/check-pending-registration', '/api/auth/check-pending-registratio
 
 // Endpoint to resume payment for pending registration
 router.post(['/resume-payment', '/api/auth/resume-payment'], asyncHandler(async (req, res) => {
-  const { tx_ref, email } = req.body;
+  const { tx_ref, original_tx_ref, email } = req.body;
   
-  if (!tx_ref || !email) {
+  if (!tx_ref || !original_tx_ref || !email) {
     return res.status(400).json({ 
       success: false,
-      error: 'Transaction reference and email are required' 
+      error: 'New transaction reference, original transaction reference, and email are required' 
     });
   }
   
   try {
-    // Check if the pending registration exists
+    // Check if the pending registration exists using the original tx_ref
     const pending = await db.oneOrNone(
       'SELECT * FROM pending_registrations WHERE tx_ref = $1 AND email = $2', 
-      [tx_ref, email]
+      [original_tx_ref, email]
     );
     
     if (!pending) {
@@ -497,15 +497,21 @@ router.post(['/resume-payment', '/api/auth/resume-payment'], asyncHandler(async 
       });
     }
     
-    // Return the payment information to resume payment
+    // Update the pending registration with the new tx_ref
+    await db.none(
+      'UPDATE pending_registrations SET tx_ref = $1 WHERE tx_ref = $2 AND email = $3',
+      [tx_ref, original_tx_ref, email]
+    );
+    
+    // Return the payment information with the new tx_ref
     res.json({
       success: true,
-      tx_ref: pending.tx_ref,
+      tx_ref: tx_ref, // Use the new tx_ref
       public_key: process.env.PAYCHANGU_PUBLIC_KEY,
       amount: pending.amount,
       email: pending.email,
       phone: pending.phone,
-      message: 'Resume payment with this tx_ref.'
+      message: 'Resume payment with the new transaction reference.'
     });
   } catch (error) {
     console.error('Resume payment error:', error);
