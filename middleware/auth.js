@@ -5,12 +5,11 @@ import cookie from 'cookie';
 // Configure cookie options
 const cookieOptions = {
   httpOnly: true,
-  secure: true, // Always use secure cookies
-  sameSite: 'None', // Use capital 'N' for SameSite=None for cross-site requests
+  secure: process.env.NODE_ENV === 'production', // Only use secure in production
+  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax', // Use Lax for development
   path: '/',
   maxAge: 24 * 60 * 60 * 1000, // 24 hours
-  // Add partitioned attribute for better cross-site isolation
-  partitioned: true
+  domain: process.env.NODE_ENV === 'production' ? process.env.COOKIE_DOMAIN : undefined
 };
 
 /**
