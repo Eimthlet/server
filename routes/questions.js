@@ -122,7 +122,7 @@ router.get('/', authenticateUser, async (req, res) => {
     // First check if there's an active season
     console.log('Checking for active seasons');
     const activeSeason = await db.oneOrNone(`
-      SELECT s.id, s.name, s.minimum_score_percentage, s.created_by_admin_id
+      SELECT s.id, s.name, s.minimum_score_percentage
       FROM seasons s
       WHERE s.is_active = true 
       AND s.start_date <= NOW() 
@@ -139,15 +139,8 @@ router.get('/', authenticateUser, async (req, res) => {
       });
     }
     
-    // Verify the season was created by an admin
-    if (!activeSeason.created_by_admin_id) {
-      console.log('Active season not created by an admin');
-      return res.status(403).json({
-        questions: [],
-        message: 'The current quiz season is not available. Please try again later.',
-        status: 'INVALID_SEASON'
-      });
-    }
+    // Season is active and valid
+    console.log('Active season found and is valid');
 
     console.log('Active season found:', activeSeason);
 
