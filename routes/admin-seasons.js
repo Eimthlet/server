@@ -72,7 +72,6 @@ router.post('/', isAdmin, asyncHandler(async (req, res) => {
   try {
     const { 
       name, 
-      description, 
       start_date, 
       end_date, 
       is_active, 
@@ -93,13 +92,12 @@ router.post('/', isAdmin, asyncHandler(async (req, res) => {
     // Create the new season
     const newSeason = await db.one(`
       INSERT INTO seasons 
-        (name, description, start_date, end_date, is_active, is_qualification_round, minimum_score_percentage)
+        (name, start_date, end_date, is_active, is_qualification_round, minimum_score_percentage)
       VALUES 
-        ($1, $2, $3, $4, $5, $6, $7)
+        ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `, [
       name, 
-      description || null, 
       start_date, 
       end_date, 
       is_active || false, 
@@ -120,7 +118,6 @@ router.put('/:id', isAdmin, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { 
       name, 
-      description, 
       start_date, 
       end_date, 
       is_active, 
@@ -144,18 +141,16 @@ router.put('/:id', isAdmin, asyncHandler(async (req, res) => {
       UPDATE seasons 
       SET 
         name = COALESCE($1, name),
-        description = COALESCE($2, description),
-        start_date = COALESCE($3, start_date),
-        end_date = COALESCE($4, end_date),
-        is_active = COALESCE($5, is_active),
-        is_qualification_round = COALESCE($6, is_qualification_round),
-        minimum_score_percentage = COALESCE($7, minimum_score_percentage),
+        start_date = COALESCE($2, start_date),
+        end_date = COALESCE($3, end_date),
+        is_active = COALESCE($4, is_active),
+        is_qualification_round = COALESCE($5, is_qualification_round),
+        minimum_score_percentage = COALESCE($6, minimum_score_percentage),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $8
+      WHERE id = $7
       RETURNING *
     `, [
       name, 
-      description, 
       start_date, 
       end_date, 
       is_active, 

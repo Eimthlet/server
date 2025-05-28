@@ -8,7 +8,7 @@ const router = express.Router();
 
 // Get all users with pagination and filtering
 router.get('/', isAdmin, asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20, search = '', role, status } = req.query;
+  const { page = 1, limit = 20, search = '', role } = req.query;
   const offset = (page - 1) * limit;
   
   // Build the WHERE clause based on filters
@@ -28,12 +28,6 @@ router.get('/', isAdmin, asyncHandler(async (req, res) => {
     paramIndex++;
   }
   
-  if (status) {
-    whereClause.push(`status = $${paramIndex}`);
-    params.push(status);
-    paramIndex++;
-  }
-  
   const whereString = whereClause.length > 0 ? `WHERE ${whereClause.join(' AND ')}` : '';
   
   // Get total count for pagination
@@ -50,12 +44,12 @@ router.get('/', isAdmin, asyncHandler(async (req, res) => {
       username, 
       email, 
       role, 
-      status,
+      role as status,
       is_disqualified,
       created_at,
       updated_at,
-      (SELECT COUNT(*) FROM quiz_sessions WHERE user_id = users.id) as attempt_count,
-      (SELECT MAX(score) FROM quiz_sessions WHERE user_id = users.id AND completed = true) as highest_score
+      (SELECT COUNT(*) FROM user_quiz_attempts WHERE user_id = users.id) as attempt_count,
+      (SELECT MAX(score) FROM user_quiz_attempts WHERE user_id = users.id AND completed = true) as highest_score
     FROM users
     ${whereString}
     ORDER BY created_at DESC
@@ -89,7 +83,7 @@ router.get('/:id', isAdmin, asyncHandler(async (req, res) => {
       username, 
       email, 
       role, 
-      status,
+      role as status,
       is_disqualified,
       created_at,
       updated_at
@@ -151,7 +145,7 @@ router.get('/:id', isAdmin, asyncHandler(async (req, res) => {
 // Update user (role, status, etc.)
 router.put('/:id', isAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { role, status, is_disqualified, username, email } = req.body;
+  const { role, is_disqualified, username, email } = req.body;
   
   // Verify user exists
   const userExists = await db.oneOrNone('SELECT id FROM users WHERE id = $1', [id]);
@@ -170,11 +164,12 @@ router.put('/:id', isAdmin, asyncHandler(async (req, res) => {
     paramIndex++;
   }
   
-  if (status !== undefined) {
-    updateFields.push(`status = $${paramIndex}`);
-    values.push(status);
-    paramIndex++;
-  }
+  // Status is handled through role in this database schema
+  // if (status !== undefined) {
+  //   updateFields.push(`status = $${paramIndex}`);
+  //   values.push(status);
+  //   paramIndex++;
+  // }
   
   if (is_disqualified !== undefined) {
     updateFields.push(`is_disqualified = $${paramIndex}`);
@@ -269,11 +264,11 @@ router.delete('/:id', isAdmin, asyncHandler(async (req, res) => {
   }
   
   if (softDelete === 'true') {
-    // Soft delete - update status to 'inactive'
-    await db.none('UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2', ['inactive', id]);
+    // Soft delete - update is_disqualified to true
+    await db.none('UPDATE users SET is_disqualified = true, updated_at = NOW() WHERE id = $2', [id]);
     
     res.json({
-      message: 'User deactivated successfully'
+      message: 'User disqualified successfully'
     });
   } else {
     // Hard delete - remove from database
