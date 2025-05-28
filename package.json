@@ -10,6 +10,7 @@
     "seed": "node seed.js",
     "seed:admin": "node seed_admin_user.js",
     "check-db": "node check_db.js",
+    "fix-dates": "node scripts/fix-dates.js",
     "setup": "npm run migrate && npm run seed && npm run seed:admin"
   },
   "dependencies": {
@@ -26,6 +27,8 @@
     "pg": "^8.16.0",
     "pg-hstore": "^2.3.4",
     "pg-promise": "^10.15.4",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0"
   },
