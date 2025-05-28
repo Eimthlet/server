@@ -5,11 +5,11 @@ import cookie from 'cookie';
 // Configure cookie options
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production', // Only use secure in production
-  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax', // Use Lax for development
+  secure: true, // Always use secure cookies
+  sameSite: 'None', // Required for cross-origin cookies
   path: '/',
   maxAge: 24 * 60 * 60 * 1000, // 24 hours
-  domain: process.env.NODE_ENV === 'production' ? process.env.COOKIE_DOMAIN : undefined
+  domain: '.onrender.com' // Domain for the backend server
 };
 
 /**

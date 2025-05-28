@@ -37,6 +37,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Middleware
 const allowedOrigins = [
+  'https://car-quizz-jonathans-projects-8c96c19b.vercel.app',
   'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
   'http://localhost:3000',  // For local development
   'http://localhost:5000'   // For local development
@@ -44,9 +45,16 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Check if the origin is allowed
+    if (allowedOrigins.includes(origin)) {
       callback(null, origin);
     } else {
+      console.log('Origin not allowed by CORS:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
