@@ -6,10 +6,9 @@ import cookie from 'cookie';
 const cookieOptions = {
   httpOnly: true,
   secure: true, // Always use secure cookies
-  sameSite: 'None', // Required for cross-origin cookies
+  // No SameSite attribute - let the browser use the default
   path: '/',
-  maxAge: 24 * 60 * 60 * 1000, // 24 hours
-  domain: '.onrender.com' // Domain for the backend server
+  maxAge: 24 * 60 * 60 * 1000 // 24 hours
 };
 
 /**

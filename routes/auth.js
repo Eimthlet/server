@@ -215,49 +215,18 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     );
 
     // Set HTTP-only cookies
-    const cookieOptions = {
-      httpOnly: true,
-      secure: true, // Always use secure cookies
-      sameSite: 'None', // Required for cross-origin cookies
-      path: '/',
-      domain: 'car-quizz.onrender.com' // Exact domain for the backend server
+    // Set cookies directly using headers to avoid browser SameSite warnings
+    const cookieHeader = (name, value, maxAge) => {
+      return `${name}=${value}; HttpOnly; Secure; Path=/; Max-Age=${Math.floor(maxAge / 1000)}; SameSite=None`;
     };
     
-    // Add the Partitioned attribute as a string in the header directly
-    // This is because some versions of Express don't support the partitioned property
-    const cookieHeader = (name, value, options) => {
-      const cookieString = `${name}=${value}; Partitioned; ${Object.entries(options)
-        .map(([key, value]) => {
-          if (key === 'maxAge') {
-            return `Max-Age=${Math.floor(value / 1000)}`;
-          }
-          if (key === 'httpOnly') {
-            return 'HttpOnly';
-          }
-          if (key === 'sameSite') {
-            return `SameSite=${value}`;
-          }
-          return `${key.charAt(0).toUpperCase() + key.slice(1)}=${value}`;
-        })
-        .join('; ')}`;
-      return cookieString;
-    };
+    // Set cookies using headers with simplified approach
+    const accessTokenMaxAge = 60 * 60 * 1000; // 1 hour
+    const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
     
-    // Set cookies with Partitioned attribute using headers directly
-    const accessTokenOptions = {
-      ...cookieOptions,
-      maxAge: 60 * 60 * 1000 // 1 hour
-    };
-    
-    const refreshTokenOptions = {
-      ...cookieOptions,
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    };
-    
-    // Set cookies using headers to ensure Partitioned attribute is properly set
     res.setHeader('Set-Cookie', [
-      cookieHeader('accessToken', token, accessTokenOptions),
-      cookieHeader('refreshToken', refreshToken, refreshTokenOptions)
+      cookieHeader('accessToken', token, accessTokenMaxAge),
+      cookieHeader('refreshToken', refreshToken, refreshTokenMaxAge)
     ]);
 
     res.json({
@@ -323,23 +292,19 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   );
 
   // Set HTTP-only cookies for both tokens
-  const cookieOptions = {
-    httpOnly: true,
-    secure: true, // Always use secure cookies
-    sameSite: 'None', // Required for cross-origin cookies
-    path: '/',
-    domain: '.onrender.com', // Domain for the backend server
-    maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
+  // Simplified cookie header function that works better with cross-origin requests
+  const cookieHeader = (name, value, maxAge) => {
+    return `${name}=${value}; HttpOnly; Secure; Path=/; Max-Age=${Math.floor(maxAge / 1000)}; SameSite=None`;
   };
   
-  // Set access token cookie
-  res.cookie('accessToken', token, cookieOptions);
+  // Set cookies using headers with simplified approach
+  const accessTokenMaxAge = 60 * 60 * 1000; // 1 hour
+  const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
   
-  // Set refresh token cookie with longer expiration
-  res.cookie('refreshToken', newRefreshToken, {
-    ...cookieOptions,
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
-  });
+  res.setHeader('Set-Cookie', [
+    cookieHeader('accessToken', token, accessTokenMaxAge),
+    cookieHeader('refreshToken', newRefreshToken, refreshTokenMaxAge)
+  ]);
   
   // Also send tokens in the response body
   res.json({
@@ -402,16 +367,11 @@ router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, r
 // Logout endpoint to clear cookies
 router.post(['/logout', '/api/auth/logout'], asyncHandler(async (req, res) => {
   // Clear all auth cookies
-  const cookieOptions = {
-    httpOnly: true,
-    secure: true, // Always use secure cookies
-    sameSite: 'None', // Use capital N for SameSite=None
-    path: '/',
-    domain: '.onrender.com' // Set domain for Render
-  };
-  
-  res.clearCookie('accessToken', cookieOptions);
-  res.clearCookie('refreshToken', cookieOptions);
+  // For clearing cookies, we need to set an expired date and use the same SameSite=None attribute
+  res.setHeader('Set-Cookie', [
+    'accessToken=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=None',
+    'refreshToken=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=None'
+  ]);
   
   // Also clear any refresh tokens from the database if the user is authenticated
   try {
