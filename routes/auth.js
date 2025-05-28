@@ -218,10 +218,9 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     const cookieOptions = {
       httpOnly: true,
       secure: true, // Always use secure cookies
-      sameSite: 'None', // Use capital N for SameSite=None
+      sameSite: 'None', // Required for cross-origin cookies
       path: '/',
-      domain: 'car-quizz.onrender.com', // Set exact domain
-      partitioned: true // Add partitioning for better cross-site isolation
+      domain: '.onrender.com' // Domain for the backend server
     };
     
     // Add the Partitioned attribute as a string in the header directly
@@ -327,9 +326,9 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   const cookieOptions = {
     httpOnly: true,
     secure: true, // Always use secure cookies
-    sameSite: 'Strict', // Use Strict for better security
+    sameSite: 'None', // Required for cross-origin cookies
     path: '/',
-    partitioned: true, // Add partitioning for cross-site cookies
+    domain: '.onrender.com', // Domain for the backend server
     maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
   };
   
