@@ -34,6 +34,60 @@ const fallbackQuestions = [
     category: 'Car Terminology',
     difficulty: 'Easy',
     season_id: 1
+  },
+  {
+    id: 4,
+    question: 'Which car brand has a logo featuring four interlocking rings?',
+    options: ['Audi', 'BMW', 'Mercedes-Benz', 'Volkswagen'],
+    correct_answer: 'Audi',
+    category: 'Car Brands',
+    difficulty: 'Medium',
+    season_id: 1
+  },
+  {
+    id: 5,
+    question: 'What does MPG stand for in car specifications?',
+    options: ['Miles Per Gallon', 'Maximum Power Generated', 'Motor Power Grade', 'Multiple Point Gearbox'],
+    correct_answer: 'Miles Per Gallon',
+    category: 'Car Terminology',
+    difficulty: 'Easy',
+    season_id: 1
+  },
+  {
+    id: 6,
+    question: 'Which car company produces the 911 model?',
+    options: ['Porsche', 'Ferrari', 'Lamborghini', 'Aston Martin'],
+    correct_answer: 'Porsche',
+    category: 'Car Brands',
+    difficulty: 'Medium',
+    season_id: 1
+  },
+  {
+    id: 7,
+    question: 'What type of engine uses spark plugs to ignite the fuel?',
+    options: ['Gasoline', 'Diesel', 'Electric', 'Hydrogen'],
+    correct_answer: 'Gasoline',
+    category: 'Car Mechanics',
+    difficulty: 'Medium',
+    season_id: 1
+  },
+  {
+    id: 8,
+    question: 'Which country is home to the car manufacturer Hyundai?',
+    options: ['South Korea', 'Japan', 'China', 'Germany'],
+    correct_answer: 'South Korea',
+    category: 'Car Brands',
+    difficulty: 'Medium',
+    season_id: 1
+  },
+  {
+    id: 9,
+    question: 'What does ABS stand for in car safety features?',
+    options: ['Anti-lock Braking System', 'Automatic Brake System', 'Advanced Braking Sensors', 'Automated Backup System'],
+    correct_answer: 'Anti-lock Braking System',
+    category: 'Car Safety',
+    difficulty: 'Medium',
+    season_id: 1
   }
 ];
 
@@ -47,6 +101,24 @@ router.get('/', authenticateUser, async (req, res) => {
   });
 
   try {
+    // Check if the user already has a completed attempt
+    if (req.user) {
+      const existingCompletedAttempt = await db.oneOrNone(
+        'SELECT * FROM user_quiz_attempts WHERE user_id = $1 AND completed = true',
+        [req.user.id]
+      );
+
+      if (existingCompletedAttempt) {
+        console.log('User already has a completed attempt:', existingCompletedAttempt);
+        return res.status(403).json({ 
+          error: 'You have already completed the quiz. Only one attempt is allowed per season.',
+          attemptId: existingCompletedAttempt.id,
+          completed: true,
+          score: existingCompletedAttempt.score
+        });
+      }
+    }
+    
     // First check if there's an active season
     console.log('Checking for active seasons');
     const activeSeason = await db.oneOrNone(`
@@ -188,8 +260,45 @@ router.get('/', authenticateUser, async (req, res) => {
       timestamp: new Date().toISOString()
     });
     
-    // Instead of returning an error, use fallback questions
-    console.log('Using fallback questions due to error');
+    // Try to diagnose the specific error
+    let errorType = 'unknown';
+    let errorMessage = 'An unexpected error occurred while fetching questions.';
+    
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('connect')) {
+      errorType = 'connection';
+      errorMessage = 'Unable to connect to the database. Please try again later.';
+    } else if (error.message.includes('relation') && error.message.includes('does not exist')) {
+      errorType = 'schema';
+      errorMessage = 'Database schema issue. Please contact support.';
+    } else if (error.message.includes('permission denied')) {
+      errorType = 'permission';
+      errorMessage = 'Database permission issue. Please contact support.';
+    }
+    
+    console.log(`Identified error type: ${errorType}. Using fallback questions.`);
+    
+    // Check if the user already has a completed attempt before using fallback
+    if (req.user) {
+      try {
+        const existingCompletedAttempt = await db.oneOrNone(
+          'SELECT * FROM user_quiz_attempts WHERE user_id = $1 AND completed = true',
+          [req.user.id]
+        );
+
+        if (existingCompletedAttempt) {
+          console.log('User already has a completed attempt (fallback check):', existingCompletedAttempt);
+          return res.status(403).json({ 
+            error: 'You have already completed the quiz. Only one attempt is allowed per season.',
+            attemptId: existingCompletedAttempt.id,
+            completed: true,
+            score: existingCompletedAttempt.score
+          });
+        }
+      } catch (secondaryError) {
+        console.error('Error checking for completed attempts during fallback:', secondaryError);
+        // Continue to fallback questions if this check fails
+      }
+    }
     
     // Format the fallback questions in the same way as the regular questions
     const formattedFallbackQuestions = fallbackQuestions.map(q => ({
@@ -210,8 +319,9 @@ router.get('/', authenticateUser, async (req, res) => {
         name: 'Default Season',
         minimumScorePercentage: 60
       },
-      message: 'Using sample questions. The quiz database is currently being updated.',
-      usingFallback: true
+      message: `Using sample questions. ${errorMessage}`,
+      usingFallback: true,
+      errorType: errorType
     });
   }
 });

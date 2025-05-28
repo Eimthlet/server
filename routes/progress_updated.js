@@ -30,22 +30,48 @@ router.post('/', authenticateUser, async (req, res) => {
 
       if (!attempt) {
         // Create a new attempt if none exists
-        attempt = await db.one(
-          `INSERT INTO user_quiz_attempts 
-           (user_id, score, completed, completed_at, qualifies_for_next_round, percentage_score) 
-           VALUES ($1, $2, true, CURRENT_TIMESTAMP, $3, $4) 
-           RETURNING *`,
-          [userId, score, score >= Math.ceil(total / 2), Math.round((score / total) * 100)]
-        );
+        try {
+          // Try to create with total_questions column
+          attempt = await db.one(
+            `INSERT INTO user_quiz_attempts 
+             (user_id, score, completed, completed_at, qualifies_for_next_round, percentage_score, total_questions) 
+             VALUES ($1, $2, true, CURRENT_TIMESTAMP, $3, $4, $5) 
+             RETURNING *`,
+            [userId, score, score >= Math.ceil(total / 2), Math.round((score / total) * 100), total]
+          );
+        } catch (columnError) {
+          // If total_questions column doesn't exist, create without it
+          console.log('Note: Could not include total_questions in insert:', columnError.message);
+          attempt = await db.one(
+            `INSERT INTO user_quiz_attempts 
+             (user_id, score, completed, completed_at, qualifies_for_next_round, percentage_score) 
+             VALUES ($1, $2, true, CURRENT_TIMESTAMP, $3, $4) 
+             RETURNING *`,
+            [userId, score, score >= Math.ceil(total / 2), Math.round((score / total) * 100)]
+          );
+        }
       } else {
         // Update existing attempt
-        await db.none(
-          `UPDATE user_quiz_attempts 
-           SET score = $1, completed = true, completed_at = CURRENT_TIMESTAMP,
-           qualifies_for_next_round = $2, percentage_score = $3
-           WHERE id = $4`,
-          [score, score >= Math.ceil(total / 2), Math.round((score / total) * 100), attempt.id]
-        );
+        try {
+          // Try to update with total_questions column
+          await db.none(
+            `UPDATE user_quiz_attempts 
+             SET score = $1, completed = true, completed_at = CURRENT_TIMESTAMP,
+             qualifies_for_next_round = $2, percentage_score = $3, total_questions = $4
+             WHERE id = $5`,
+            [score, score >= Math.ceil(total / 2), Math.round((score / total) * 100), total, attempt.id]
+          );
+        } catch (columnError) {
+          // If total_questions column doesn't exist, update without it
+          console.log('Note: Could not update total_questions:', columnError.message);
+          await db.none(
+            `UPDATE user_quiz_attempts 
+             SET score = $1, completed = true, completed_at = CURRENT_TIMESTAMP,
+             qualifies_for_next_round = $2, percentage_score = $3
+             WHERE id = $4`,
+            [score, score >= Math.ceil(total / 2), Math.round((score / total) * 100), attempt.id]
+          );
+        }
       }
 
       // Calculate if user qualifies for next round (50% minimum score)
@@ -74,12 +100,22 @@ router.post('/', authenticateUser, async (req, res) => {
     );
 
     if (existingCompletedAttempt) {
+      // Get total questions count if available
+      let totalQuestions = 0;
+      try {
+        if (existingCompletedAttempt.hasOwnProperty('total_questions')) {
+          totalQuestions = existingCompletedAttempt.total_questions || 0;
+        }
+      } catch (error) {
+        console.log('Could not access total_questions property:', error.message);
+      }
+      
       return res.status(403).json({ 
         error: 'You have already completed the quiz. Only one attempt is allowed per season.',
         attemptId: existingCompletedAttempt.id,
         completed: true,
         score: existingCompletedAttempt.score,
-        totalQuestions: existingCompletedAttempt.total_questions || 0,
+        totalQuestions: totalQuestions,
         percentageScore: existingCompletedAttempt.percentage_score || 0
       });
     }
@@ -92,18 +128,28 @@ router.post('/', authenticateUser, async (req, res) => {
 
     if (!attempt) {
       // Get total questions count for this season
-      const totalQuestions = await db.one(
+      const totalQuestionsCount = await db.one(
         'SELECT COUNT(*) FROM questions WHERE season_id = (SELECT id FROM seasons WHERE is_active = true LIMIT 1)',
         [],
         count => parseInt(count.count)
       );
       
       // Create a new attempt if none exists
-      attempt = await db.one(
-        'INSERT INTO user_quiz_attempts (user_id, total_questions) VALUES ($1, $2) RETURNING *',
-        [userId, totalQuestions]
-      );
-      console.log('Created new quiz attempt with total questions:', attempt);
+      try {
+        // Try to create with total_questions column
+        attempt = await db.one(
+          'INSERT INTO user_quiz_attempts (user_id, total_questions) VALUES ($1, $2) RETURNING *',
+          [userId, totalQuestionsCount]
+        );
+      } catch (columnError) {
+        // If total_questions column doesn't exist, create without it
+        console.log('Note: Could not include total_questions in insert:', columnError.message);
+        attempt = await db.one(
+          'INSERT INTO user_quiz_attempts (user_id) VALUES ($1) RETURNING *',
+          [userId]
+        );
+      }
+      console.log('Created new quiz attempt:', attempt);
     }
 
     // Get the question to check the answer
@@ -141,20 +187,24 @@ router.post('/', authenticateUser, async (req, res) => {
       [attempt.id, questionId, answer, isCorrect]
     );
 
-    // Get total questions count from the attempt record or query if not available
-    let totalQuestions = attempt.total_questions;
-    if (!totalQuestions) {
-      totalQuestions = await db.one(
-        'SELECT COUNT(*) FROM questions WHERE season_id = (SELECT id FROM seasons WHERE is_active = true LIMIT 1)',
-        [],
-        count => parseInt(count.count)
-      );
-      
-      // Update the attempt with the total questions count if it wasn't set
+    // Get total questions count from the active season
+    const totalQuestions = await db.one(
+      'SELECT COUNT(*) FROM questions WHERE season_id = (SELECT id FROM seasons WHERE is_active = true LIMIT 1)',
+      [],
+      count => parseInt(count.count)
+    );
+    
+    // Try to update the attempt with the total questions count if the column exists
+    try {
       await db.none(
-        'UPDATE user_quiz_attempts SET total_questions = $1 WHERE id = $2',
+        `UPDATE user_quiz_attempts 
+         SET total_questions = $1 
+         WHERE id = $2`,
         [totalQuestions, attempt.id]
       );
+    } catch (columnError) {
+      // If the column doesn't exist yet, just log the error and continue
+      console.log('Note: Could not update total_questions column:', columnError.message);
     }
 
     // Get answered questions count for this attempt
@@ -178,13 +228,26 @@ router.post('/', authenticateUser, async (req, res) => {
       const percentageScore = Math.round((correctCount / totalQuestions) * 100);
       
       // Update the attempt as completed with qualification status
-      await db.none(
-        `UPDATE user_quiz_attempts 
-         SET completed = true, score = $1, completed_at = CURRENT_TIMESTAMP,
-         qualifies_for_next_round = $2, percentage_score = $3
-         WHERE id = $4`,
-        [correctCount, qualifiesForNextRound, percentageScore, attempt.id]
-      );
+      try {
+        // Try to update with total_questions column
+        await db.none(
+          `UPDATE user_quiz_attempts 
+           SET completed = true, score = $1, completed_at = CURRENT_TIMESTAMP,
+           qualifies_for_next_round = $2, percentage_score = $3, total_questions = $4
+           WHERE id = $5`,
+          [correctCount, qualifiesForNextRound, percentageScore, totalQuestions, attempt.id]
+        );
+      } catch (columnError) {
+        // If total_questions column doesn't exist, update without it
+        console.log('Note: Could not update total_questions:', columnError.message);
+        await db.none(
+          `UPDATE user_quiz_attempts 
+           SET completed = true, score = $1, completed_at = CURRENT_TIMESTAMP,
+           qualifies_for_next_round = $2, percentage_score = $3
+           WHERE id = $4`,
+          [correctCount, qualifiesForNextRound, percentageScore, attempt.id]
+        );
+      }
 
       // Return the final result
       return res.json({
@@ -236,20 +299,31 @@ router.get('/', authenticateUser, async (req, res) => {
       });
     }
 
-    // Get total questions count from the attempt record or query if not available
-    let totalQuestions = attempt.total_questions;
-    if (!totalQuestions) {
-      totalQuestions = await db.one(
-        'SELECT COUNT(*) FROM questions WHERE season_id = (SELECT id FROM seasons WHERE is_active = true LIMIT 1)',
-        [],
-        count => parseInt(count.count)
-      );
-      
-      // Update the attempt with the total questions count if it wasn't set
-      await db.none(
-        'UPDATE user_quiz_attempts SET total_questions = $1 WHERE id = $2',
-        [totalQuestions, attempt.id]
-      );
+    // Get total questions count from the active season
+    const totalQuestionsCount = await db.one(
+      'SELECT COUNT(*) FROM questions WHERE season_id = (SELECT id FROM seasons WHERE is_active = true LIMIT 1)',
+      [],
+      count => parseInt(count.count)
+    );
+    
+    // Use the count from the query or attempt record if available
+    let totalQuestions = totalQuestionsCount;
+    
+    // Try to update the attempt with the total questions count if the column exists
+    try {
+      if (attempt.hasOwnProperty('total_questions')) {
+        if (!attempt.total_questions) {
+          await db.none(
+            'UPDATE user_quiz_attempts SET total_questions = $1 WHERE id = $2',
+            [totalQuestions, attempt.id]
+          );
+        } else {
+          totalQuestions = attempt.total_questions;
+        }
+      }
+    } catch (columnError) {
+      // If there's an error updating the column, just log it and continue
+      console.log('Note: Could not update total_questions column:', columnError.message);
     }
 
     // Get progress details

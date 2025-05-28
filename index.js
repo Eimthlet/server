@@ -18,9 +18,10 @@ import adminUsersRoutes from './routes/admin-users.js';
 import resultsRoutes from "./routes/results.js";
 import questionsRoutes from "./routes/questions.js";
 import quizRoutes from "./routes/quiz.js";
-import progressRoutes from "./routes/progress.js";
+import progressRoutes from "./routes/progress_updated.js";
 import leaderboardRoutes from "./routes/leaderboard.js";
 import qualificationRoutes from "./routes/qualification.js";
+import migrationsRoutes from "./routes/migrations.js";
 
 // Middleware
 import { isAdmin, authenticateUser } from './middleware/auth.js';
@@ -122,6 +123,7 @@ app.use('/api/admin', isAdmin, adminRoutes);
 app.use('/api/admin/quiz', isAdmin, adminQuizRoutes);
 app.use('/api/admin/seasons', isAdmin, adminSeasonsRoutes);
 app.use('/api/admin/users', adminUsersRoutes); // New admin users route
+app.use('/api/admin/migrations', isAdmin, migrationsRoutes); // Migrations route for database updates
 app.use('/api/questions', questionsRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/results', resultsRoutes);
