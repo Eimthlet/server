@@ -6,9 +6,11 @@ import cookie from 'cookie';
 const cookieOptions = {
   httpOnly: true,
   secure: true, // Always use secure cookies
-  sameSite: 'none', // Always use sameSite=none for cross-site requests
+  sameSite: 'None', // Use capital 'N' for SameSite=None for cross-site requests
   path: '/',
-  maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  // Add partitioned attribute for better cross-site isolation
+  partitioned: true
 };
 
 /**

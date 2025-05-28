@@ -172,11 +172,29 @@ async function handlePayChanguCallback(req, res) {
       // Create the user and get the ID in a single variable that's accessible throughout the outer try block
       let userId;
       try {
-        // Make sure to set the role to 'user' and is_admin to false
-        const result = await db.one(
-          'INSERT INTO users (username, email, password_hash, role, is_admin) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-          [pending.username, pending.email, pending.password_hash, 'user', false]
+        // Check if the users table has an is_admin column
+        const tableInfo = await db.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
         );
+        const columns = tableInfo.map(col => col.column_name);
+        console.log('Available columns in users table:', columns);
+        
+        // Determine the appropriate SQL query based on available columns
+        let result;
+        if (columns.includes('is_admin')) {
+          // If is_admin column exists, include it in the query
+          result = await db.one(
+            'INSERT INTO users (username, email, password_hash, role, is_admin) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [pending.username, pending.email, pending.password_hash, 'user', false]
+          );
+        } else {
+          // If is_admin column doesn't exist, only use role
+          result = await db.one(
+            'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
+            [pending.username, pending.email, pending.password_hash, 'user']
+          );
+        }
+        
         userId = result.id;
         console.log('User created successfully with ID:', userId);
       } catch (dbError) {

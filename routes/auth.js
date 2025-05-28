@@ -434,4 +434,87 @@ router.post(['/logout', '/api/auth/logout'], asyncHandler(async (req, res) => {
   });
 }));
 
+// Endpoint to check for pending registrations
+router.post(['/check-pending-registration', '/api/auth/check-pending-registration'], asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  
+  if (!email) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Email is required' 
+    });
+  }
+  
+  try {
+    // Check if there's a pending registration for this email
+    const pending = await db.oneOrNone('SELECT * FROM pending_registrations WHERE email = $1', [email]);
+    
+    if (pending) {
+      return res.json({
+        success: true,
+        pending: true,
+        tx_ref: pending.tx_ref,
+        email: pending.email
+      });
+    } else {
+      return res.json({
+        success: true,
+        pending: false
+      });
+    }
+  } catch (error) {
+    console.error('Error checking pending registration:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to check pending registration', 
+      details: error.message 
+    });
+  }
+}));
+
+// Endpoint to resume payment for pending registration
+router.post(['/resume-payment', '/api/auth/resume-payment'], asyncHandler(async (req, res) => {
+  const { tx_ref, email } = req.body;
+  
+  if (!tx_ref || !email) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Transaction reference and email are required' 
+    });
+  }
+  
+  try {
+    // Check if the pending registration exists
+    const pending = await db.oneOrNone(
+      'SELECT * FROM pending_registrations WHERE tx_ref = $1 AND email = $2', 
+      [tx_ref, email]
+    );
+    
+    if (!pending) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'No pending registration found' 
+      });
+    }
+    
+    // Return the payment information to resume payment
+    res.json({
+      success: true,
+      tx_ref: pending.tx_ref,
+      public_key: process.env.PAYCHANGU_PUBLIC_KEY,
+      amount: pending.amount,
+      email: pending.email,
+      phone: pending.phone,
+      message: 'Resume payment with this tx_ref.'
+    });
+  } catch (error) {
+    console.error('Resume payment error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to resume payment', 
+      details: error.message 
+    });
+  }
+}));
+
 export default router;
