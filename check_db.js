@@ -32,16 +32,17 @@ async function checkDatabase() {
       }
     }
     
-    // Check for admin user
+    // Check admin user
     console.log('\nChecking admin user...');
-    const admin = await db.oneOrNone(
-      'SELECT id, email, is_admin FROM users WHERE is_admin = true LIMIT 1'
-    );
-    
-    if (admin) {
-      console.log(`✓ Admin user found: ${admin.email}`);
-    } else {
-      console.log('✗ No admin user found');
+    try {
+      const adminUser = await db.oneOrNone('SELECT id, email FROM users WHERE admin = true LIMIT 1');
+      console.log(`- Admin user: ${adminUser ? '✓ Found' : '✗ Not found'}`);
+      if (adminUser) {
+        console.log(`  ID: ${adminUser.id}, Email: ${adminUser.email}`);
+      }
+    } catch (error) {
+      console.error('Database Error:', error);
+      console.error('\nℹ️  If getting column errors, check your database schema matches the expected structure');
     }
     
   } catch (error) {

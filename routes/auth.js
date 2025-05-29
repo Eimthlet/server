@@ -198,11 +198,10 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     }
 
     // Create JWT payload with both isAdmin and role for backward compatibility
-    const isAdmin = user.role === 'admin';
     const payload = {
       id: user.id,
       email: user.email,
-      isAdmin: isAdmin,
+      isAdmin: user.admin,
       role: user.role || 'user' // Include the role field
     };
     
@@ -237,7 +236,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     const userResponse = {
       id: user.id,
       email: user.email,
-      isAdmin: isAdmin,
+      isAdmin: user.admin,
       role: user.role || 'user'
     };
     
@@ -291,8 +290,7 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
     role: tokenRecord.role || 'user'
   };
   
-  const isAdmin = user.role === 'admin';
-  console.log('Refreshing token for user:', { ...user, isAdmin });
+  console.log('Refreshing token for user:', { ...user, isAdmin: tokenRecord.admin });
 
   const newRefreshToken = generateRefreshToken();
 
@@ -307,7 +305,7 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   const payload = {
     id: user.id,
     email: user.email,
-    isAdmin: isAdmin,
+    isAdmin: tokenRecord.admin,
     role: user.role,
     exp: Math.floor(Date.now() / 1000) + (60 * 60) // Token expires in 1 hour
   };
@@ -334,7 +332,7 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   const userResponse = {
     id: user.id,
     email: user.email,
-    isAdmin: isAdmin,
+    isAdmin: tokenRecord.admin,
     role: user.role
   };
   
@@ -366,7 +364,7 @@ router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, r
     const decoded = jwt.verify(token, JWT_SECRET);
     
     // Get user details from database to ensure the user still exists
-    const user = await db.oneOrNone('SELECT id, email, role FROM users WHERE id = $1', [decoded.id]);
+    const user = await db.oneOrNone('SELECT id, email, role, admin FROM users WHERE id = $1', [decoded.id]);
     
     if (!user) {
       return res.status(401).json({
@@ -376,11 +374,10 @@ router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, r
       });
     }
     
-    const isAdmin = user.role === 'admin';
     const userResponse = {
       id: user.id,
       email: user.email,
-      isAdmin: isAdmin,
+      isAdmin: user.admin,
       role: user.role || 'user'
     };
     

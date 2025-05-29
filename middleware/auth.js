@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import db from '../config/database.js';
 import cookie from 'cookie';
+import bcrypt from 'bcrypt';
 
 // Configure cookie options
 const cookieOptions = {
@@ -83,73 +84,26 @@ export const authenticateUser = (req, res, next) => {
 /**
  * Middleware to verify if user is an admin
  */
-export const isAdmin = (req, res, next) => {
+export const isAdmin = async (req, res, next) => {
   try {
-    // First check for the accessToken cookie, then fall back to Authorization header
-    let token = req.cookies.accessToken;
-    
-    // If no cookie, try the Authorization header
+    const token = req.cookies?.token || req.headers?.authorization?.split(' ')[1];
     if (!token) {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        return res.status(401).json({ 
-          error: 'Unauthorized', 
-          details: 'No authentication token provided' 
-        });
-      }
-      
-      const tokenParts = authHeader.split(' ');
-      if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-        return res.status(401).json({ 
-          error: 'Invalid Authorization', 
-          details: 'Authorization header must be in format: Bearer <token>' 
-        });
-      }
-      token = tokenParts[1];
+      return res.status(401).json({ error: 'Authentication required' });
     }
-    
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Check token expiration
-    const currentTime = Math.floor(Date.now() / 1000);
-    if (decoded.exp && decoded.exp < currentTime) {
-      return res.status(401).json({ 
-        error: 'Your session has expired', 
-        details: 'Please log in again to continue.',
-        code: 'TOKEN_EXPIRED'
-      });
+    // Check if user is admin
+    const user = await db.oneOrNone('SELECT id FROM users WHERE id = $1 AND admin = true', [decoded.id]);
+    if (!user) {
+      return res.status(403).json({ error: 'Admin access required' });
     }
 
-    // Check admin status - check both isAdmin and role for backward compatibility
-    const isAdminUser = decoded.isAdmin || (decoded.role && decoded.role.toLowerCase() === 'admin');
-    if (!isAdminUser) {
-      console.log('Access denied - User is not an admin. User role:', decoded.role);
-      return res.status(403).json({ 
-        error: 'Access restricted', 
-        details: 'This area is only accessible to administrators.',
-        code: 'ADMIN_REQUIRED',
-        userRole: decoded.role || 'not set'
-      });
-    }
-    
-    console.log('Admin access granted for user:', decoded.email, 'Role:', decoded.role);
-
-    // Attach user to request
     req.user = decoded;
     next();
   } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
-        error: 'Invalid Token', 
-        details: 'The provided authentication token is invalid.' 
-      });
-    }
-    
-    console.error('Admin middleware error:', error);
-    res.status(500).json({ 
-      error: 'Server Error', 
-      details: 'An unexpected error occurred during authentication.' 
-    });
+    console.error('Admin check error:', error);
+    return res.status(401).json({ error: 'Invalid token' });
   }
 };
 
@@ -200,39 +154,44 @@ export const checkDisqualification = async (req, res, next) => {
   }
 };
 
-export async function loginUser(username, password, callback) {
+// Login function
+export async function loginUser(email, password, callback) {
   try {
-    const result = await pool.query(
-      "SELECT * FROM users WHERE username = $1",
-      [username]
+    const user = await db.oneOrNone(
+      'SELECT id, email, password FROM users WHERE email = $1', 
+      [email]
     );
-    
-    const row = result.rows[0];
-    if (!row) {
-      return callback(null, false, "Invalid username or password");
+
+    if (!user) {
+      return callback(new Error('User not found'), null);
     }
-    
-    // Skip password validation and generate token directly
-    const token = jwt.sign(
-      { id: row.id, username: row.username, isAdmin: row.is_admin },
-      JWT_SECRET,
-      { expiresIn: TOKEN_EXPIRY }
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return callback(new Error('Invalid password'), null);
+    }
+
+    // Check admin status
+    const isAdmin = await db.oneOrNone(
+      'SELECT id FROM users WHERE id = $1 AND admin = true',
+      [user.id]
     );
-    
-    callback(null, {
-      id: row.id,
-      username: row.username,
-      token,
-      isAdmin: row.is_admin
-    });
-  } catch (err) {
-    callback(err);
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, isAdmin: !!isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    callback(null, token);
+  } catch (error) {
+    callback(error, null);
   }
 }
 
 export function verifyToken(token, callback) {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     callback(null, decoded);
   } catch (err) {
     callback(err);
