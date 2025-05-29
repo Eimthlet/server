@@ -202,7 +202,7 @@ router.get('/', authenticateUser, async (req, res) => {
           WHERE 
             user_id = $2
           ORDER BY 
-            created_at DESC
+            started_at DESC
           LIMIT 1`,
           [totalQuestions, userId]
         );
