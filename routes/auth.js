@@ -220,7 +220,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     // Set HTTP-only cookies
     // Set cookies directly using headers to avoid browser SameSite warnings
     const cookieHeader = (name, value, maxAge) => {
-      return `${name}=${value}; HttpOnly; Secure; Path=/; Max-Age=${Math.floor(maxAge / 1000)}; SameSite=None`;
+      return `${name}=${value}; HttpOnly; Secure; Path=/; Max-Age=${Math.floor(maxAge / 1000)}; SameSite=None; Partitioned`;
     };
     
     // Set cookies using headers with simplified approach
@@ -243,10 +243,12 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     console.log('Login successful, responding with user:', userResponse);
     
     res.json({
-      success: true,
-      token: token,
-      refreshToken: refreshToken,
-      user: userResponse
+      data: {
+        success: true,
+        token: token,
+        refreshToken: refreshToken,
+        user: userResponse
+      }
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -316,7 +318,7 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   // Set HTTP-only cookies for both tokens
   // Simplified cookie header function that works better with cross-origin requests
   const cookieHeader = (name, value, maxAge) => {
-    return `${name}=${value}; HttpOnly; Secure; Path=/; Max-Age=${Math.floor(maxAge / 1000)}; SameSite=None`;
+    return `${name}=${value}; HttpOnly; Secure; Path=/; Max-Age=${Math.floor(maxAge / 1000)}; SameSite=None; Partitioned`;
   };
   
   // Set cookies using headers with simplified approach
