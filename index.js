@@ -36,46 +36,28 @@ if (process.env.NODE_ENV !== 'production') {
   setupSwagger(app);
 }
 
-// Middleware
-const allowedOrigins = [
-  'https://car-quizz-jonathans-projects-8c96c19b.vercel.app',
-  'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
-  'https://car-quizz.vercel.app',
-  'http://localhost:3000',  // For local development
-  'http://localhost:5000'   // For local development
-];
-
+// CORS configuration
 const corsOptions = {
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    // Allow all Vercel domains and localhost
-    if (origin.endsWith('vercel.app') || origin.includes('localhost')) {
-      callback(null, origin);
-    } else {
-      console.log('Origin not allowed by CORS:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: [
+    'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
+    'https://car-quizz.vercel.app',
+    'http://localhost:3000'
+  ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'Origin', 'Accept', 'X-Requested-With', 'Cookie'],
-  exposedHeaders: ['Set-Cookie', 'X-XSRF-TOKEN'],
-  maxAge: 86400 // 24 hours
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 };
 
-// Apply CORS configuration
+// Apply CORS middleware
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable preflight for all routes
 
-// Enable pre-flight requests for all routes
-app.options('*', cors(corsOptions));
+// Cookie configuration middleware
+app.use(cookieParser());
+app.set('trust proxy', 1); // Required for secure cookies in production
 
 app.use(express.json());
 app.use(express.static('public'));
-app.use(cookieParser()); // Parse cookies
 
 // Log all requests
 app.use((req, res, next) => {
@@ -95,8 +77,6 @@ app.use((req, res, next) => {
   });
   next();
 });
-
-// Authentication middleware is now imported from './middleware/auth.js'
 
 /**
  * @swagger
