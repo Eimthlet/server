@@ -92,6 +92,14 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Add this before other routes
+app.get('/api/auth', (req, res) => {
+  res.status(200).json({ 
+    status: 'active',
+    endpoints: ['/login', '/register', '/logout', '/check-token']
+  });
+});
+
 // Mount API routes
 app.use('/api/auth', authRoutes);
 // Mount PayChangu routes at the root level to ensure callbacks work
