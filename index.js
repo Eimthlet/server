@@ -38,12 +38,29 @@ if (process.env.NODE_ENV !== 'production') {
 
 // CORS configuration
 const corsOptions = {
-  origin: [
-    'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
-    'https://car-quizz.vercel.app',
-    'https://car-quizz.onrender.com',
-    'http://localhost:3000'
-  ],
+  origin: function(origin, callback) {
+    // In development, allow all origins
+    if (process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+      return;
+    }
+    
+    // In production, check against the whitelist
+    const whitelist = [
+      'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
+      'https://car-quizz.vercel.app',
+      'https://car-quizz.onrender.com',
+      'http://localhost:3000',
+      process.env.FRONTEND_URL || 'http://localhost:3000'
+    ];
+    
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      console.log('Origin not allowed by CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
