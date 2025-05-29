@@ -6,8 +6,9 @@ import bcrypt from 'bcrypt';
 // Configure cookie options
 const cookieOptions = {
   httpOnly: true,
-  secure: true, // Always use secure cookies
-  // No SameSite attribute - let the browser use the default
+  secure: true,
+  sameSite: 'none',
+  partitioned: true,
   path: '/',
   maxAge: 24 * 60 * 60 * 1000 // 24 hours
 };

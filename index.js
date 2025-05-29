@@ -41,16 +41,19 @@ const corsOptions = {
   origin: [
     'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
     'https://car-quizz.vercel.app',
+    'https://car-quizz.onrender.com',
     'http://localhost:3000'
   ],
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  exposedHeaders: ['Set-Cookie'],
+  maxAge: 86400 // 24 hours
 };
 
 // Apply CORS middleware
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable preflight for all routes
+app.options('*', cors(corsOptions));
 
 // Cookie configuration middleware
 app.use(cookieParser());
