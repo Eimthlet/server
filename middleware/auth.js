@@ -7,10 +7,10 @@ import bcrypt from 'bcrypt';
 const cookieOptions = {
   httpOnly: true,
   secure: true,
-  sameSite: 'none',
-  partitioned: true,
+  sameSite: 'lax',
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
   path: '/',
-  maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  domain: process.env.COOKIE_DOMAIN || undefined
 };
 
 /**
