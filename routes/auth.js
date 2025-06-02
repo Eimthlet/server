@@ -18,6 +18,7 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
+<<<<<<< HEAD
 // Add health check endpoint specifically for auth routes
 router.get(['/', '/auth', '/api/auth'], (req, res) => {
   console.log('Auth health check requested at:', new Date().toISOString());
@@ -29,6 +30,8 @@ router.get(['/', '/auth', '/api/auth'], (req, res) => {
   });
 });
 
+=======
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
 // Function to generate refresh token
 function generateRefreshToken() {
   return crypto.randomBytes(40).toString('hex');
@@ -164,7 +167,10 @@ router.post(['/register', '/api/auth/register'], asyncHandler(async (req, res) =
 
 // Login endpoint
 router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
+<<<<<<< HEAD
   console.log('Login request received at:', new Date().toISOString());
+=======
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
   const { email, password } = req.body;
   
   // Validate required fields
@@ -177,6 +183,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
   }
 
   try {
+<<<<<<< HEAD
     // Create a timeout promise to prevent hanging requests
     const timeout = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Database query timeout')), 5000);
@@ -184,6 +191,10 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     // Find user by email with timeout handling
     const userPromise = db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
     const user = await Promise.race([userPromise, timeout]);
+=======
+    // Find user by email
+    const user = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
     
     if (!user) {
       return res.status(401).json({
@@ -268,6 +279,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
       }
     });
   } catch (error) {
+<<<<<<< HEAD
     console.error('Login error:', {
       message: error.message,
       stack: error.stack
@@ -282,6 +294,9 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
       });
     }
     
+=======
+    console.error('Login error:', error);
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
     throw error;
   }
 }));
@@ -379,6 +394,7 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   });
 }));
 
+<<<<<<< HEAD
 // Health check endpoint specifically for auth routes
 router.get(['/', '/api/auth'], (req, res) => {
   console.log('Auth health check requested');
@@ -427,12 +443,36 @@ router.post(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, 
     
     const userPromise = db.oneOrNone('SELECT * FROM users WHERE id = $1', [decoded.id]);
     const user = await Promise.race([userPromise, timeout]);
+=======
+// Route to check token validity
+router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, res) => {
+  // Get token from cookie instead of authorization header
+  const token = req.cookies.accessToken;
+
+  if (!token) {
+    return res.status(401).json({ 
+      success: false,
+      valid: false, 
+      error: 'No token provided' 
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Get user details from database to ensure the user still exists
+    const user = await db.oneOrNone('SELECT id, email, role, admin FROM users WHERE id = $1', [decoded.id]);
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
     
     if (!user) {
       return res.status(401).json({
         success: false,
         valid: false,
+<<<<<<< HEAD
         error: 'User not found'
+=======
+        error: 'User no longer exists'
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
       });
     }
     
@@ -453,6 +493,7 @@ router.post(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, 
   } catch (err) {
     console.log('Token validation error:', {
       name: err.name,
+<<<<<<< HEAD
       message: err.message,
       stack: err.stack
     });
@@ -467,6 +508,10 @@ router.post(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, 
       });
     }
     
+=======
+      message: err.message
+    });
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
     res.status(401).json({
       success: false,
       valid: false,

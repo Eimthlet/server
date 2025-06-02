@@ -51,6 +51,7 @@ const dbConfig = {
   ssl: { 
     rejectUnauthorized: false
   },
+<<<<<<< HEAD
   // Reduced connection timeout to fail faster if DB is unavailable
   connectionTimeoutMillis: 5000,
   // Reduced max clients for better resource management
@@ -66,6 +67,14 @@ const dbConfig = {
     max: 3,
     interval: 1000
   }
+=======
+  // Connection timeout of 10 seconds
+  connectionTimeoutMillis: 10000,
+  // Maximum number of clients in the pool
+  max: 20,
+  // Idle timeout for a client
+  idleTimeoutMillis: 30000
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
 };
 
 console.log('Initializing database connection with config:', {
@@ -76,6 +85,7 @@ console.log('Initializing database connection with config:', {
 // Create the database instance
 const db = pgp(dbConfig);
 
+<<<<<<< HEAD
 // Test the connection with retry logic
 async function testConnection() {
   const maxRetries = 3;
@@ -114,6 +124,22 @@ async function testConnection() {
   // but log the failure clearly
   console.error('WARNING: Database connection could not be established!');
   // Instead of exiting, we'll continue but may have degraded functionality
+=======
+// Test the connection
+async function testConnection() {
+  try {
+    const result = await db.one('SELECT NOW() as now');
+    console.log('Database connection test successful. Current time:', result.now);
+  } catch (error) {
+    console.error('Database connection test failed:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint
+    });
+    process.exit(1);
+  }
+>>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
 }
 
 // Run the connection test when this module is imported
