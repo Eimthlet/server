@@ -18,20 +18,6 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-<<<<<<< HEAD
-// Add health check endpoint specifically for auth routes
-router.get(['/', '/auth', '/api/auth'], (req, res) => {
-  console.log('Auth health check requested at:', new Date().toISOString());
-  res.status(200).json({ 
-    status: 'active',
-    timestamp: new Date().toISOString(),
-    endpoints: ['/login', '/register', '/logout', '/check-token'],
-    message: 'Authentication service is running'
-  });
-});
-
-=======
->>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
 // Function to generate refresh token
 function generateRefreshToken() {
   return crypto.randomBytes(40).toString('hex');
@@ -167,10 +153,6 @@ router.post(['/register', '/api/auth/register'], asyncHandler(async (req, res) =
 
 // Login endpoint
 router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
-<<<<<<< HEAD
-  console.log('Login request received at:', new Date().toISOString());
-=======
->>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
   const { email, password } = req.body;
   
   // Validate required fields
@@ -183,18 +165,8 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
   }
 
   try {
-<<<<<<< HEAD
-    // Create a timeout promise to prevent hanging requests
-    const timeout = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Database query timeout')), 5000);
-    });
-    // Find user by email with timeout handling
-    const userPromise = db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
-    const user = await Promise.race([userPromise, timeout]);
-=======
     // Find user by email
     const user = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [email]);
->>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
     
     if (!user) {
       return res.status(401).json({
@@ -229,7 +201,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     const payload = {
       id: user.id,
       email: user.email,
-      isAdmin: user.admin,
+      isAdmin: user.role === 'admin',
       role: user.role || 'user' // Include the role field
     };
     
@@ -279,24 +251,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
       }
     });
   } catch (error) {
-<<<<<<< HEAD
-    console.error('Login error:', {
-      message: error.message,
-      stack: error.stack
-    });
-    
-    // Special handling for timeout errors
-    if (error.message === 'Database query timeout') {
-      return res.status(503).json({
-        success: false,
-        error: 'Authentication service temporarily unavailable',
-        code: 'SERVICE_UNAVAILABLE'
-      });
-    }
-    
-=======
     console.error('Login error:', error);
->>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
     throw error;
   }
 }));
@@ -379,7 +334,7 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   const userResponse = {
     id: user.id,
     email: user.email,
-    isAdmin: tokenRecord.admin,
+    isAdmin: user.role === 'admin',
     role: user.role
   };
   
@@ -394,56 +349,6 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
   });
 }));
 
-<<<<<<< HEAD
-// Health check endpoint specifically for auth routes
-router.get(['/', '/api/auth'], (req, res) => {
-  console.log('Auth health check requested');
-  res.status(200).json({ 
-    status: 'active',
-    timestamp: new Date().toISOString(),
-    endpoints: ['/login', '/register', '/logout', '/check-token']
-  });
-});
-
-// Route to check token validity
-router.post(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, res) => {
-  console.log('Token validation request received at:', new Date().toISOString());
-  try {
-    // Get token from cookie, header, or body
-    let token = req.cookies?.accessToken;
-    
-    // If not in cookies, check authorization header
-    if (!token && req.headers.authorization) {
-      const authHeader = req.headers.authorization;
-      if (authHeader.startsWith('Bearer ')) {
-        token = authHeader.substring(7);
-      }
-    }
-    
-    // If still no token, check request body
-    if (!token && req.body.token) {
-      token = req.body.token;
-    }
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        valid: false,
-        error: 'No token provided'
-      });
-    }
-    
-    // Verify the token
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // Check if user still exists
-    const timeout = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Database query timeout')), 5000);
-    });
-    
-    const userPromise = db.oneOrNone('SELECT * FROM users WHERE id = $1', [decoded.id]);
-    const user = await Promise.race([userPromise, timeout]);
-=======
 // Route to check token validity
 router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, res) => {
   // Get token from cookie instead of authorization header
@@ -461,25 +366,20 @@ router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, r
     const decoded = jwt.verify(token, JWT_SECRET);
     
     // Get user details from database to ensure the user still exists
-    const user = await db.oneOrNone('SELECT id, email, role, admin FROM users WHERE id = $1', [decoded.id]);
->>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
+    const user = await db.oneOrNone('SELECT id, email, role FROM users WHERE id = $1', [decoded.id]);
     
     if (!user) {
       return res.status(401).json({
         success: false,
         valid: false,
-<<<<<<< HEAD
-        error: 'User not found'
-=======
         error: 'User no longer exists'
->>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
       });
     }
     
     const userResponse = {
       id: user.id,
       email: user.email,
-      isAdmin: user.admin,
+      isAdmin: user.role === 'admin', // Corrected: Derive isAdmin from role
       role: user.role || 'user'
     };
     
@@ -493,25 +393,8 @@ router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, r
   } catch (err) {
     console.log('Token validation error:', {
       name: err.name,
-<<<<<<< HEAD
-      message: err.message,
-      stack: err.stack
-    });
-    
-    // Special handling for timeout errors
-    if (err.message === 'Database query timeout') {
-      return res.status(503).json({
-        success: false,
-        valid: false,
-        error: 'Authentication service temporarily unavailable',
-        code: 'SERVICE_UNAVAILABLE'
-      });
-    }
-    
-=======
       message: err.message
     });
->>>>>>> e1a003cf8e9377eb786f85f708165d69f2e41808
     res.status(401).json({
       success: false,
       valid: false,
