@@ -236,7 +236,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
     const userResponse = {
       id: user.id,
       email: user.email,
-      isAdmin: user.admin,
+      isAdmin: user.role === 'admin',
       role: user.role || 'user'
     };
     
