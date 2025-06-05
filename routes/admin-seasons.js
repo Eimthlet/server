@@ -1,12 +1,12 @@
 import express from 'express';
-import { isAdmin } from '../middleware/auth.js';
+import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import db from '../config/database.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 
 // Get all seasons
-router.get('/', isAdmin, asyncHandler(async (req, res) => {
+router.get('/', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
     const seasons = await db.any(`
       SELECT 
@@ -34,7 +34,7 @@ router.get('/', isAdmin, asyncHandler(async (req, res) => {
 }));
 
 // Get a specific season by ID
-router.get('/:id', isAdmin, asyncHandler(async (req, res) => {
+router.get('/:id', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -68,7 +68,7 @@ router.get('/:id', isAdmin, asyncHandler(async (req, res) => {
 }));
 
 // Create a new season
-router.post('/', isAdmin, asyncHandler(async (req, res) => {
+router.post('/', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
     const { 
       name, 
@@ -113,7 +113,7 @@ router.post('/', isAdmin, asyncHandler(async (req, res) => {
 }));
 
 // Update a season
-router.put('/:id', isAdmin, asyncHandler(async (req, res) => {
+router.put('/:id', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     const { 
@@ -167,7 +167,7 @@ router.put('/:id', isAdmin, asyncHandler(async (req, res) => {
 }));
 
 // Delete a season
-router.delete('/:id', isAdmin, asyncHandler(async (req, res) => {
+router.delete('/:id', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -202,7 +202,7 @@ router.delete('/:id', isAdmin, asyncHandler(async (req, res) => {
 }));
 
 // Get qualified users for a specific season
-router.get('/:id/qualified-users', isAdmin, asyncHandler(async (req, res) => {
+router.get('/:id/qualified-users', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -233,7 +233,7 @@ router.get('/:id/qualified-users', isAdmin, asyncHandler(async (req, res) => {
 }));
 
 // Add questions to a season
-router.post('/:id/questions', isAdmin, asyncHandler(async (req, res) => {
+router.post('/:id/questions', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     const { questions } = req.body;
