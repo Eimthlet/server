@@ -45,7 +45,7 @@ const corsOptions = {
       return;
     }
     
-    // In production, check against the whitelist
+    // In production, check against the whitelist and patterns
     const whitelist = [
       'https://car-quizz-git-main-jonathans-projects-8c96c19b.vercel.app',
       'https://car-quizz.vercel.app',
@@ -53,8 +53,15 @@ const corsOptions = {
       'http://localhost:3000',
       process.env.FRONTEND_URL || 'http://localhost:3000'
     ];
+
+    // Allow all Vercel preview deployments
+    const isVercelPreview = origin && (
+      origin.endsWith('-jonathans-projects-8c96c19b.vercel.app') ||
+      origin.includes('car-quizz-git-') ||
+      whitelist.includes(origin)
+    );
     
-    if (whitelist.indexOf(origin) !== -1 || !origin) {
+    if (isVercelPreview || !origin) {
       callback(null, true);
     } else {
       console.log('Origin not allowed by CORS:', origin);
@@ -100,7 +107,7 @@ app.use((req, res, next) => {
 
 /**
  * @swagger
- * /api/health:
+ * /health:
  *   get:
  *     summary: Health check endpoint
  *     description: Returns the health status of the API
@@ -108,12 +115,12 @@ app.use((req, res, next) => {
  *       200:
  *         description: API is running
  */
-app.get('/api/health', (req, res) => {
+app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Add this before other routes
-app.get('/api/auth', (req, res) => {
+app.get('/auth', (req, res) => {
   res.status(200).json({ 
     status: 'active',
     endpoints: ['/login', '/register', '/logout', '/check-token']
@@ -121,26 +128,26 @@ app.get('/api/auth', (req, res) => {
 });
 
 // Mount API routes
-app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 // Mount PayChangu routes at the root level to ensure callbacks work
-// The routes are already handling both / and /api/auth paths internally
+// The routes are already handling both / and /auth paths internally
 app.use('/', paychanguRoutes);
 
 // Mount admin routes
-app.use('/api/admin', isAdmin, adminRoutes);
-app.use('/api/admin/quiz', isAdmin, adminQuizRoutes);
-app.use('/api/admin/seasons', isAdmin, adminSeasonsRoutes);
-app.use('/api/admin/users', isAdmin, adminUsersRoutes); // New admin users route
-app.use('/api/admin/migrations', isAdmin, migrationsRoutes); // Migrations route for database updates
-app.use('/api/questions', questionsRoutes);
-app.use('/api/quiz', quizRoutes);
-app.use('/api/results', resultsRoutes);
-app.use('/api/progress', progressRoutes);
-app.use('/api/leaderboard', leaderboardRoutes); // Changed from /api/results/leaderboard
-app.use('/api/qualification', qualificationRoutes);
+app.use('/admin', isAdmin, adminRoutes);
+app.use('/admin/quiz', isAdmin, adminQuizRoutes);
+app.use('/admin/seasons', isAdmin, adminSeasonsRoutes);
+app.use('/admin/users', isAdmin, adminUsersRoutes); // New admin users route
+app.use('/admin/migrations', isAdmin, migrationsRoutes); // Migrations route for database updates
+app.use('/questions', questionsRoutes);
+app.use('/quiz', quizRoutes);
+app.use('/results', resultsRoutes);
+app.use('/progress', progressRoutes);
+app.use('/leaderboard', leaderboardRoutes); // Changed from /api/results/leaderboard
+app.use('/qualification', qualificationRoutes);
 
 // 404 Handler for API routes
-app.use('/api/*', (req, res) => {
+app.use('*', (req, res) => {
   res.status(404).json({ error: 'API endpoint not found' });
 });
 
