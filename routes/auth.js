@@ -351,8 +351,16 @@ router.post('/refresh', asyncHandler(async (req, res) => {
 
 // Route to check token validity
 router.get('/check-token', asyncHandler(async (req, res) => {
-  // Get token from cookie instead of authorization header
-  const token = req.cookies.accessToken;
+  // Get token from cookie or Authorization header
+  let token = req.cookies.accessToken;
+  
+  // If no cookie, try the Authorization header
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+  }
 
   if (!token) {
     return res.status(401).json({ 
