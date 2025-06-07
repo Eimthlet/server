@@ -43,8 +43,8 @@ const paychanguCallback = async (req, res) => {
   router.post(`${path}paychangu-callback`, paychanguCallback);
 });
 
-// Payment verification endpoint
-router.post('/api/auth/verify-payment', async (req, res) => {
+// Mount the verify-payment route at multiple paths for backward compatibility
+router.post('/verify-payment', async (req, res) => {
   try {
     const { tx_ref } = req.body;
     
