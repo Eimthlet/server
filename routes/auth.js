@@ -24,7 +24,7 @@ function generateRefreshToken() {
 }
 
 // Registration endpoint
-router.post(['/register', '/api/auth/register'], asyncHandler(async (req, res) => {
+router.post('/register', asyncHandler(async (req, res) => {
   console.log('Register request received:', req.body);
   const { username, email, password, phone, amount } = req.body;
 
@@ -152,7 +152,7 @@ router.post(['/register', '/api/auth/register'], asyncHandler(async (req, res) =
 }));
 
 // Login endpoint
-router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
+router.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   
   // Validate required fields
@@ -257,7 +257,7 @@ router.post(['/login', '/api/auth/login'], asyncHandler(async (req, res) => {
 }));
 
 // Refresh token endpoint
-router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => {
+router.post('/refresh', asyncHandler(async (req, res) => {
   // Get refresh token from cookie or request body
   let refreshToken = req.cookies.refreshToken;
   
@@ -350,7 +350,7 @@ router.post(['/refresh', '/api/auth/refresh'], asyncHandler(async (req, res) => 
 }));
 
 // Route to check token validity
-router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, res) => {
+router.get('/check-token', asyncHandler(async (req, res) => {
   // Get token from cookie instead of authorization header
   const token = req.cookies.accessToken;
 
@@ -405,7 +405,7 @@ router.get(['/check-token', '/api/auth/check-token'], asyncHandler(async (req, r
 }));
 
 // Logout endpoint to clear cookies
-router.post(['/logout', '/api/auth/logout'], asyncHandler(async (req, res) => {
+router.post('/logout', asyncHandler(async (req, res) => {
   // Clear all auth cookies
   // For clearing cookies, we need to set an expired date and use the same SameSite=None attribute
   res.setHeader('Set-Cookie', [
@@ -434,7 +434,7 @@ router.post(['/logout', '/api/auth/logout'], asyncHandler(async (req, res) => {
 }));
 
 // Endpoint to check for pending registrations
-router.post(['/check-pending-registration', '/api/auth/check-pending-registration'], asyncHandler(async (req, res) => {
+router.post('/check-pending-registration', asyncHandler(async (req, res) => {
   const { email } = req.body;
   
   if (!email) {
@@ -472,7 +472,7 @@ router.post(['/check-pending-registration', '/api/auth/check-pending-registratio
 }));
 
 // Endpoint to resume payment for pending registration
-router.post(['/resume-payment', '/api/auth/resume-payment'], asyncHandler(async (req, res) => {
+router.post('/resume-payment', asyncHandler(async (req, res) => {
   const { tx_ref, original_tx_ref, email } = req.body;
   
   if (!tx_ref || !original_tx_ref || !email) {
