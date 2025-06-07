@@ -243,12 +243,10 @@ router.post('/login', asyncHandler(async (req, res) => {
     console.log('Login successful, responding with user:', userResponse);
     
     res.json({
-      data: {
-        success: true,
-        token: token,
-        refreshToken: refreshToken,
-        user: userResponse
-      }
+      success: true,
+      token: token,
+      refreshToken: refreshToken,
+      user: userResponse
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -351,94 +349,83 @@ router.post('/refresh', asyncHandler(async (req, res) => {
 
 // Route to check token validity
 router.get('/check-token', asyncHandler(async (req, res) => {
-  // Get token from cookie or Authorization header
-  let token = req.cookies.accessToken;
-  
-  // If no cookie, try the Authorization header
-  if (!token) {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.split(' ')[1];
-    }
-  }
+  const token = req.cookies.accessToken;
 
   if (!token) {
     return res.status(401).json({ 
-      success: false,
-      valid: false, 
-      error: 'No token provided' 
+      isAuthenticated: false, 
+      error: 'No token provided',
+      code: 'NO_TOKEN'
     });
   }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // Get user details from database to ensure the user still exists
-    const user = await db.oneOrNone('SELECT id, email, role FROM users WHERE id = $1', [decoded.id]);
-    
+    const user = await db.oneOrNone('SELECT id, email, role, is_disqualified FROM users WHERE id = $1', [decoded.id]);
+
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        valid: false,
-        error: 'User no longer exists'
+      return res.status(401).json({ 
+        isAuthenticated: false, 
+        error: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     }
-    
-    const userResponse = {
-      id: user.id,
-      email: user.email,
-      isAdmin: user.role === 'admin', // Corrected: Derive isAdmin from role
-      role: user.role || 'user'
-    };
-    
-    console.log('Token check successful, responding with user:', userResponse);
-    
+  
+    if (user.is_disqualified) {
+      return res.status(403).json({ 
+        isAuthenticated: false, 
+        error: 'User is disqualified',
+        code: 'USER_DISQUALIFIED'
+      });
+    }
+
+    // Return user data without the 'data' wrapper
     res.json({
-      success: true,
-      valid: true,
-      user: userResponse
+      isAuthenticated: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        isAdmin: user.role === 'admin',
+        role: user.role
+      }
     });
-  } catch (err) {
-    console.log('Token validation error:', {
-      name: err.name,
-      message: err.message
-    });
-    res.status(401).json({
-      success: false,
-      valid: false,
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return res.status(401).json({ 
+      isAuthenticated: false, 
       error: 'Invalid token',
-      details: err.name
+      code: 'INVALID_TOKEN'
     });
   }
 }));
 
 // Logout endpoint to clear cookies
 router.post('/logout', asyncHandler(async (req, res) => {
-  // Clear all auth cookies
-  // For clearing cookies, we need to set an expired date and use the same SameSite=None attribute
-  res.setHeader('Set-Cookie', [
-    'accessToken=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=None',
-    'refreshToken=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=None'
-  ]);
-  
-  // Also clear any refresh tokens from the database if the user is authenticated
-  try {
-    const token = req.cookies.accessToken;
-    if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      if (decoded && decoded.id) {
-        await db.none('DELETE FROM refresh_tokens WHERE user_id = $1', [decoded.id]);
+  const { refreshToken } = req.cookies;
+
+  if (refreshToken) {
+    try {
+      // Find the token in the database
+      const storedToken = await db.oneOrNone('SELECT id FROM refresh_tokens WHERE token = $1', [refreshToken]);
+
+      if (storedToken) {
+        // Invalidate the refresh token by deleting it
+        await db.none('DELETE FROM refresh_tokens WHERE id = $1', [storedToken.id]);
       }
+    } catch (error) {
+      console.error('Error invalidating refresh token:', error);
+      // Don't block logout if there's a DB error, just log it
     }
-  } catch (error) {
-    // If token verification fails, we still want to clear cookies
-    console.log('Error during logout token verification:', error);
   }
   
-  res.json({
-    success: true,
-    message: 'Logged out successfully'
-  });
+  // Clear cookies by setting their expiration to a past date
+  res.setHeader('Set-Cookie', [
+    'accessToken=; HttpOnly; Secure; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Partitioned',
+    'refreshToken=; HttpOnly; Secure; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Partitioned'
+  ]);
+
+  // Send a success response without the 'data' wrapper
+  res.json({ success: true, message: 'Logged out successfully' });
 }));
 
 // Endpoint to check for pending registrations
@@ -529,5 +516,91 @@ router.post('/resume-payment', asyncHandler(async (req, res) => {
     });
   }
 }));
+
+// Callback endpoint for PayChangu
+router.get('/callback', asyncHandler(async (req, res) => {
+  const { tx_ref, status, transaction_id } = req.query;
+
+  // Validate callback parameters
+  if (!tx_ref) {
+    return res.status(400).send('Transaction reference is missing.');
+  }
+
+  // Find pending registration
+  const pendingUser = await db.oneOrNone('SELECT * FROM pending_registrations WHERE tx_ref = $1', [tx_ref]);
+  if (!pendingUser) {
+    return res.status(404).send('Pending registration not found.');
+  }
+
+  // Verify payment with PayChangu
+  try {
+    const verificationResponse = await fetch(`https://api.paychangu.com/sdk/transaction/verify/${tx_ref}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${process.env.PAYCHANGU_SECRET_KEY}`
+      }
+    });
+    
+    const verificationData = await verificationResponse.json();
+    
+    // Check if payment was successful
+    if (verificationData.status === 'success' && verificationData.data.status === 'completed') {
+      // Check if user already exists
+      const existingUser = await db.oneOrNone('SELECT * FROM users WHERE email = $1', [pendingUser.email]);
+      if (existingUser) {
+        // User exists, redirect to login
+        return res.redirect(`${process.env.FRONTEND_URL}/login?status=already_registered`);
+      }
+      
+      // Create user
+      const newUser = await db.one(
+        'INSERT INTO users (username, email, password_hash, phone, is_verified) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, role',
+        [pendingUser.username, pendingUser.email, pendingUser.password_hash, pendingUser.phone, true]
+      );
+      
+      // Delete from pending_registrations
+      await db.none('DELETE FROM pending_registrations WHERE tx_ref = $1', [tx_ref]);
+
+      // Redirect to a success page
+      res.redirect(`${process.env.FRONTEND_URL}/payment-success?email=${encodeURIComponent(newUser.email)}`);
+    } else {
+      // Payment failed or is pending
+      res.redirect(`${process.env.FRONTEND_URL}/payment-failed?reason=${encodeURIComponent(verificationData.message || 'Payment not completed')}`);
+    }
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).send('An error occurred during payment verification.');
+  }
+}));
+
+// Route for admin to get user details
+router.get('/admin/user/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const user = await db.oneOrNone('SELECT id, username, email, phone, is_disqualified FROM users WHERE id = $1', [id]);
+        if (user) {
+            res.json({ success: true, user: user });
+        } else {
+            res.status(404).json({ success: false, error: 'User not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route for admin to update user details
+router.put('/admin/user/:id', async (req, res) => {
+    const { id } = req.params;
+    const { username, email, phone, is_disqualified } = req.body;
+    try {
+        const updatedUser = await db.one(
+            'UPDATE users SET username = $1, email = $2, phone = $3, is_disqualified = $4 WHERE id = $5 RETURNING id, username, email, phone, is_disqualified',
+            [username, email, phone, is_disqualified, id]
+        );
+        res.json({ success: true, user: updatedUser });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 export default router;

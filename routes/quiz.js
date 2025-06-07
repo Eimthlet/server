@@ -18,7 +18,7 @@ router.post('/disqualify', authenticateUser, async (req, res) => {
   }
 
   try {
-    await db.none('UPDATE users SET disqualified = true WHERE id = $1', [userId]);
+    await db.none('UPDATE users SET is_disqualified = true WHERE id = $1', [userId]);
     res.json({ message: 'User disqualified successfully' });
   } catch (error) {
     console.error('Error disqualifying user:', error);

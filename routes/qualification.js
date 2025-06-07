@@ -14,11 +14,9 @@ router.get('/', authenticateUser, async (req, res) => {
     if (!req.user?.id) {
       console.error('No user ID in request');
       return res.status(400).json({
-        data: {
-          error: 'User ID is required',
-          hasAttempted: false,
-          isQualified: false
-        }
+        error: 'User ID is required',
+        hasAttempted: false,
+        isQualified: false
       });
     }
     
@@ -32,12 +30,10 @@ router.get('/', authenticateUser, async (req, res) => {
     } catch (dbTestError) {
       console.error('Database connection test failed:', dbTestError);
       return res.status(503).json({
-        data: {
-          error: 'Database connection error',
-          message: 'Unable to connect to the database',
-          hasAttempted: false,
-          isQualified: false
-        }
+        error: 'Database connection error',
+        message: 'Unable to connect to the database',
+        hasAttempted: false,
+        isQualified: false
       });
     }
     
@@ -63,22 +59,18 @@ router.get('/', authenticateUser, async (req, res) => {
     } catch (tableCheckError) {
       console.error('Error checking table existence:', tableCheckError);
       return res.status(200).json({
-        data: {
-          hasAttempted: false,
-          isQualified: false,
-          message: 'System is initializing. Please try again later.'
-        }
+        hasAttempted: false,
+        isQualified: false,
+        message: 'System is initializing. Please try again later.'
       });
     }
 
     if (!tablesExist || !tablesExist.questions_exist || !tablesExist.sessions_exist) {
       console.log('Required tables do not exist');
       return res.status(200).json({
-        data: {
-          hasAttempted: false,
-          isQualified: false,
-          message: 'Quiz not yet available.'
-        }
+        hasAttempted: false,
+        isQualified: false,
+        message: 'Quiz not yet available.'
       });
     }
 
@@ -98,24 +90,20 @@ router.get('/', authenticateUser, async (req, res) => {
         
         console.error(`Missing required tables: ${missingTables.join(', ')}`);
         return res.status(500).json({
-          data: {
-            error: 'Database not properly initialized',
-            message: `Missing required tables: ${missingTables.join(', ')}`,
-            hasAttempted: false,
-            isQualified: false
-          }
+          error: 'Database not properly initialized',
+          message: `Missing required tables: ${missingTables.join(', ')}`,
+          hasAttempted: false,
+          isQualified: false
         });
       }
     } catch (tableCheckError) {
       console.error('Error checking table existence:', tableCheckError);
       return res.status(500).json({
-        data: {
-          error: 'Database error',
-          message: 'Failed to verify database structure',
-          details: process.env.NODE_ENV === 'development' ? tableCheckError.message : undefined,
-          hasAttempted: false,
-          isQualified: false
-        }
+        error: 'Database error',
+        message: 'Failed to verify database structure',
+        details: process.env.NODE_ENV === 'development' ? tableCheckError.message : undefined,
+        hasAttempted: false,
+        isQualified: false
       });
     }
     
@@ -130,11 +118,9 @@ router.get('/', authenticateUser, async (req, res) => {
       if (totalQuestions === 0) {
         console.warn('No questions found in the database');
         return res.status(200).json({
-          data: {
-            hasAttempted: false,
-            isQualified: false,
-            message: 'No questions are available at this time.'
-          }
+          hasAttempted: false,
+          isQualified: false,
+          message: 'No questions are available at this time.'
         });
       }
     } catch (countError) {
@@ -159,24 +145,20 @@ router.get('/', authenticateUser, async (req, res) => {
         routine: countError.routine
       });
       return res.status(200).json({
-        data: {
-          hasAttempted: false,
-          isQualified: false,
-          message: 'Error loading quiz data.',
-          error: countError.message,
-          code: countError.code
-        }
+        hasAttempted: false,
+        isQualified: false,
+        message: 'Error loading quiz data.',
+        error: countError.message,
+        code: countError.code
       });
     }
     
     if (!totalQuestions || totalQuestions.count === 0) {
       console.log('No questions found in the database');
       return res.status(200).json({
-        data: {
-          hasAttempted: false,
-          isQualified: false,
-          message: 'No questions available yet.'
-        }
+        hasAttempted: false,
+        isQualified: false,
+        message: 'No questions available yet.'
       });
     }
 
@@ -227,17 +209,13 @@ router.get('/', authenticateUser, async (req, res) => {
         console.log('Any attempt found:', attempt ? 'Yes' : 'No');
       }
       
-
-
       if (!attempt) {
         // User has not taken the quiz yet
         console.log('No quiz attempts found for user');
         return res.json({
-          data: {
-            hasAttempted: false,
-            isQualified: false,
-            message: 'You have not attempted the quiz yet.'
-          }
+          hasAttempted: false,
+          isQualified: false,
+          message: 'You have not attempted the quiz yet.'
         });
       }
 
@@ -248,27 +226,22 @@ router.get('/', authenticateUser, async (req, res) => {
       const isQualified = percentageScore >= 50;
       
       return res.json({
-        data: {
-          hasAttempted: true,
-          isQualified,
-          score: attempt.score,
-          totalQuestions: attempt.total_questions,
-          percentageScore: percentageScore.toFixed(2),
-          minimumRequired,
-          message: isQualified
-            ? 'Congratulations! You have qualified for the next round.' 
-            : `You did not meet the minimum score requirement of ${minimumRequired} points (50%).`
-        }
+        hasAttempted: true,
+        isQualified,
+        score: attempt.score,
+        totalQuestions: attempt.total_questions,
+        percentage: Math.round(percentageScore),
+        completed: attempt.completed
       });
-    } catch (dbError) {
-      console.error('Database error in qualification endpoint:', dbError);
-      return res.status(200).json({
-        data: {
-          hasAttempted: false,
-          isQualified: false,
-          message: 'Quiz data not yet available.'
-        }
+    } catch (error) {
+      console.error('Error fetching qualification status:', error);
+      res.status(500).json({ 
+        error: 'Internal server error',
+        message: 'Something went wrong on our end',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
+    } finally {
+      console.log('=== QUALIFICATION REQUEST FINISHED ===\n');
     }
   } catch (error) {
     console.error('=== UNHANDLED ERROR IN QUALIFICATION ENDPOINT ===');
@@ -283,15 +256,11 @@ router.get('/', authenticateUser, async (req, res) => {
     });
     
     return res.status(500).json({ 
-      data: {
-        error: 'Internal Server Error',
-        message: 'An unexpected error occurred',
-        code: error.code,
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      }
+      error: 'Internal Server Error',
+      message: 'An unexpected error occurred',
+      code: error.code,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  } finally {
-    console.log('=== QUALIFICATION REQUEST COMPLETED ===');
   }
 });
 
