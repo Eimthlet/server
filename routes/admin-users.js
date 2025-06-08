@@ -272,7 +272,7 @@ router.delete('/:id', isAdmin, asyncHandler(async (req, res) => {
   
   if (softDelete === 'true') {
     // Soft delete - update is_disqualified to true
-    await db.none('UPDATE users SET is_disqualified = true, updated_at = NOW() WHERE id = $2', [id]);
+    await db.none('UPDATE users SET is_disqualified = true, updated_at = NOW() WHERE id = $1', [id]);
     
     res.json({
       message: 'User disqualified successfully'
