@@ -8,7 +8,7 @@ const router = express.Router();
 
 // Get all users with pagination and filtering
 router.get('/', isAdmin, asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20, search = '', role } = req.query;
+  const { page = 1, limit = 20, search = '', role, status } = req.query;
   const offset = (page - 1) * limit;
   
   // Build the WHERE clause based on filters
@@ -26,6 +26,13 @@ router.get('/', isAdmin, asyncHandler(async (req, res) => {
     whereClause.push(`role = $${paramIndex}`);
     params.push(role);
     paramIndex++;
+  }
+  
+  // Handle status filter (maps to is_disqualified in the database)
+  if (status === 'active') {
+    whereClause.push(`is_disqualified = false`);
+  } else if (status === 'disqualified') {
+    whereClause.push(`is_disqualified = true`);
   }
   
   const whereString = whereClause.length > 0 ? `WHERE ${whereClause.join(' AND ')}` : '';
