@@ -209,7 +209,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
     // Generate tokens
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
-    const refreshToken = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const refreshToken = generateRefreshToken(); // Use the existing crypto function
     
     // Store refresh token in database
     await db.none(
@@ -237,7 +237,12 @@ router.post('/login', asyncHandler(async (req, res) => {
       id: user.id,
       email: user.email,
       isAdmin: user.role === 'admin',
-      role: user.role || 'user'
+      role: user.role || 'user',
+      username: user.username,
+      is_verified: user.is_verified,
+      is_disqualified: user.is_disqualified,
+      avatar_url: user.avatar_url,
+      created_at: user.created_at,
     };
     
     console.log('Login successful, responding with user:', userResponse);
@@ -572,35 +577,5 @@ router.get('/callback', asyncHandler(async (req, res) => {
     res.status(500).send('An error occurred during payment verification.');
   }
 }));
-
-// Route for admin to get user details
-router.get('/admin/user/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const user = await db.oneOrNone('SELECT id, username, email, phone, is_disqualified FROM users WHERE id = $1', [id]);
-        if (user) {
-            res.json({ success: true, user: user });
-        } else {
-            res.status(404).json({ success: false, error: 'User not found' });
-        }
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Route for admin to update user details
-router.put('/admin/user/:id', async (req, res) => {
-    const { id } = req.params;
-    const { username, email, phone, is_disqualified } = req.body;
-    try {
-        const updatedUser = await db.one(
-            'UPDATE users SET username = $1, email = $2, phone = $3, is_disqualified = $4 WHERE id = $5 RETURNING id, username, email, phone, is_disqualified',
-            [username, email, phone, is_disqualified, id]
-        );
-        res.json({ success: true, user: updatedUser });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
 
 export default router;

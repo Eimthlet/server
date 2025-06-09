@@ -5,6 +5,7 @@ import path from 'path';
 import { isAdmin } from '../middleware/auth.js';
 import db from '../config/database.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import bcrypt from 'bcryptjs';
 
 // Ensure all routes that require admin access use the middleware
 
@@ -40,6 +41,147 @@ router.get('/users', isAdmin, asyncHandler(async (req, res) => {
     console.error('Error fetching users:', error);
     throw error;
   }
+}));
+
+// Route for admin to get a specific user's details including attempts and qualifications
+router.get('/user/:id', isAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    try {
+        const userPromise = db.oneOrNone('SELECT id, username, email, phone, is_disqualified, role, created_at, last_login FROM users WHERE id = $1', [id]);
+        
+        const attemptsPromise = db.any(`
+            SELECT 
+                qa.id,
+                qa.score,
+                qa.total_questions, 
+                qa.completed,
+                qa.started_at,
+                qa.completed_at,
+                qa.season_id,
+                s.name as season_name,
+                s.minimum_score_percentage, 
+                qa.round_id,
+                r.name as round_name,
+                (CASE 
+                    WHEN qa.total_questions IS NOT NULL AND qa.total_questions > 0 THEN (qa.score * 100.0 / qa.total_questions) 
+                    ELSE 0 
+                END) as percentage_score
+            FROM user_quiz_attempts qa
+            LEFT JOIN seasons s ON qa.season_id = s.id
+            LEFT JOIN rounds r ON qa.round_id = r.id
+            WHERE qa.user_id = $1
+            ORDER BY qa.completed_at DESC
+        `, [id]);
+
+        const [user, attemptsData] = await Promise.all([userPromise, attemptsPromise]);
+
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        const qualifications = attemptsData
+            .filter(attempt => attempt.completed && attempt.season_id && typeof attempt.minimum_score_percentage === 'number' && attempt.percentage_score >= attempt.minimum_score_percentage)
+            .map(attempt => ({
+                id: attempt.id, 
+                score: attempt.score,
+                completed_at: attempt.completed_at,
+                season_id: attempt.season_id,
+                season_name: attempt.season_name,
+                round_id: attempt.round_id,
+                round_name: attempt.round_name,
+                minimum_score_percentage: attempt.minimum_score_percentage,
+                percentage_score: attempt.percentage_score
+            }));
+        
+        const attempts = attemptsData.map(({ minimum_score_percentage, ...rest }) => rest);
+
+        res.json({ 
+            success: true, 
+            user: {
+                ...user,
+                attempts,
+                qualifications
+            } 
+        });
+
+    } catch (error) {
+        console.error(`Error fetching detailed user data for ${id}:`, error);
+        res.status(500).json({ success: false, error: 'Failed to get detailed user data', details: error.message });
+    }
+}));
+
+// Route for admin to update a specific user's details
+router.put('/user/:id', isAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { username, email, phone, is_disqualified, role } = req.body; 
+
+    if (typeof username === 'undefined' || typeof email === 'undefined' || typeof phone === 'undefined' || typeof is_disqualified === 'undefined' || typeof role === 'undefined') {
+        return res.status(400).json({ success: false, error: 'Missing one or more required fields: username, email, phone, is_disqualified, role' });
+    }
+    
+    try {
+        const updatedUser = await db.one(
+            'UPDATE users SET username = $1, email = $2, phone = $3, is_disqualified = $4, role = $5 WHERE id = $6 RETURNING id, username, email, phone, is_disqualified, role, created_at, last_login',
+            [username, email, phone, is_disqualified, role, id]
+        );
+        res.json({ success: true, message: 'User updated successfully', user: updatedUser });
+    } catch (error) {
+        console.error(`Error updating user ${id}:`, error);
+        if (error.code === '23505') { // Unique violation (e.g. for email)
+             return res.status(409).json({ success: false, error: 'Failed to update user. Email or username may already exist.', details: error.message });
+        }
+        res.status(500).json({ success: false, error: 'Failed to update user', details: error.message });
+    }
+}));
+
+// Route for admin to delete a user
+router.delete('/user/:id', isAdmin, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Optional: Check if user exists before attempting delete, though DB will handle it
+    const user = await db.oneOrNone('SELECT id FROM users WHERE id = $1', [id]);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    await db.none('DELETE FROM users WHERE id = $1', [id]);
+    // Consider also deleting related data e.g., quiz attempts, refresh tokens, etc.
+    // For now, just deleting the user record.
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error(`Error deleting user ${id}:`, error);
+    res.status(500).json({ success: false, error: 'Failed to delete user', details: error.message });
+  }
+}));
+
+// Route for admin to reset a user's password
+router.post('/user/:id/reset-password', isAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 8) {
+        return res.status(400).json({ success: false, error: 'New password must be at least 8 characters long.' });
+    }
+
+    try {
+        // It's good practice to ensure the user exists before trying to update
+        const userExists = await db.oneOrNone('SELECT id FROM users WHERE id = $1', [id]);
+        if (!userExists) {
+            return res.status(404).json({ success: false, error: 'User not found.' });
+        }
+
+        const saltRounds = 10; // Consider making this an environment variable
+        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+        await db.none('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [hashedPassword, id]);
+        
+        // Security consideration: Invalidate user's existing sessions/tokens here if possible/needed.
+        // This might involve clearing refresh tokens from the database for this user.
+
+        res.json({ success: true, message: 'Password reset successfully.' });
+    } catch (error) {
+        console.error(`Error resetting password for user ${id}:`, error);
+        res.status(500).json({ success: false, error: 'Failed to reset password.', details: error.message });
+    }
 }));
 
 // Get disqualified users
@@ -378,28 +520,107 @@ router.post('/questions', isAdmin, asyncHandler(async (req, res) => {
   }
 }));
 
-// Get season statistics
-router.get('/seasons', isAdmin, asyncHandler(async (req, res) => {
+// Update a question
+router.put('/questions/:id', isAdmin, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { question, options, correctAnswer, category, difficulty, timeLimit, seasonId } = req.body;
+  const userId = req.user.id;
+
+  const updates = [];
+  const values = [];
+  let paramCount = 1;
+
+  if (question !== undefined) {
+    updates.push(`question = $${paramCount++}`);
+    values.push(question);
+  }
+  if (options !== undefined) {
+    if (!Array.isArray(options) || options.length < 2) {
+      return res.status(400).json({ success: false, error: 'Options must be an array with at least two items.' });
+    }
+    updates.push(`options = $${paramCount++}`);
+    values.push(JSON.stringify(options));
+  }
+  if (correctAnswer !== undefined) {
+    if (options && !options.includes(correctAnswer)) {
+         return res.status(400).json({ success: false, error: 'Correct answer must be one of the provided options.' });
+    }
+    updates.push(`correct_answer = $${paramCount++}`);
+    values.push(correctAnswer);
+  }
+  if (category !== undefined) {
+    updates.push(`category = $${paramCount++}`);
+    values.push(category);
+  }
+  if (difficulty !== undefined) {
+    updates.push(`difficulty = $${paramCount++}`);
+    values.push(difficulty);
+  }
+  if (timeLimit !== undefined) {
+    updates.push(`time_limit = $${paramCount++}`);
+    values.push(timeLimit);
+  }
+  if (seasonId !== undefined) {
+    updates.push(`season_id = $${paramCount++}`);
+    values.push(seasonId === '' ? null : seasonId);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ success: false, error: 'No update fields provided.' });
+  }
+
+  updates.push(`updated_at = CURRENT_TIMESTAMP`);
+  updates.push(`updated_by = $${paramCount++}`);
+  values.push(userId);
+  values.push(id);
+
   const query = `
-    SELECT 
-      s.id,
-      s.name,
-      COUNT(DISTINCT qr.user_id) as total_participants,
-      AVG(qr.score) as average_score,
-      COUNT(CASE WHEN qr.score >= r.min_score_to_qualify THEN 1 END) as qualified_users
-    FROM seasons s
-    LEFT JOIN quiz_results qr ON s.id = qr.season_id
-    LEFT JOIN rounds r ON qr.round_id = r.id
-    GROUP BY s.id
-    ORDER BY s.start_date DESC
+    UPDATE questions 
+    SET ${updates.join(', ')}
+    WHERE id = $${paramCount} 
+    RETURNING id, question, options, correct_answer AS "correctAnswer", category, difficulty, time_limit AS "timeLimit", season_id AS "seasonId", updated_at, updated_by;
   `;
 
   try {
-    const rows = await db.any(query);
-    res.json(rows);
+    const updatedQuestion = await db.oneOrNone(query, values);
+    if (!updatedQuestion) {
+      return res.status(404).json({ success: false, error: 'Question not found or no changes made.' });
+    }
+    if (typeof updatedQuestion.options === 'string') {
+        updatedQuestion.options = JSON.parse(updatedQuestion.options);
+    }
+    res.json({ success: true, question: updatedQuestion });
   } catch (error) {
-    console.error('Error fetching season stats:', error);
-    throw error;
+    console.error('Error updating question:', error);
+    if (error.code === '23503') { 
+        return res.status(400).json({ success: false, error: 'Invalid season_id provided.', details: error.message });
+    }
+    res.status(500).json({ success: false, error: 'Failed to update question', details: error.message });
+  }
+}));
+
+// Get all seasons (details for SeasonManager)
+router.get('/seasons', isAdmin, asyncHandler(async (req, res) => {
+  const query = `
+    SELECT 
+      id, 
+      name, 
+      start_date, 
+      end_date, 
+      is_active, 
+      description,
+      minimum_score_percentage,
+      is_qualification_round
+    FROM seasons
+    ORDER BY start_date DESC;
+  `;
+
+  try {
+    const seasons = await db.any(query);
+    res.json(seasons); // Frontend expects a direct array of season objects
+  } catch (error) {
+    console.error('Error fetching seasons:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch seasons', details: error.message });
   }
 }));
 
@@ -484,6 +705,99 @@ router.delete('/seasons/:id', isAdmin, asyncHandler(async (req, res) => {
   } catch (error) {
     console.error('Error deleting season:', error);
     throw error;
+  }
+}));
+
+// Get all questions for a specific season
+router.get('/seasons/:seasonId/questions', isAdmin, asyncHandler(async (req, res) => {
+  const { seasonId } = req.params;
+  try {
+    const questions = await db.any('SELECT * FROM questions WHERE season_id = $1 ORDER BY id ASC', [seasonId]);
+    const formattedQuestions = questions.map(q => ({
+      id: q.id,
+      question: q.question,
+      options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+      correctAnswer: q.correct_answer,
+      timeLimit: q.time_limit,
+      category: q.category,
+      difficulty: q.difficulty,
+    }));
+    res.json(formattedQuestions);
+  } catch (error) {
+    console.error(`Error fetching questions for season ${seasonId}:`, error);
+    res.status(500).json({ success: false, error: 'Failed to fetch questions for season', details: error.message });
+  }
+}));
+
+// Add new question(s) to a specific season
+router.post('/seasons/:seasonId/questions', isAdmin, asyncHandler(async (req, res) => {
+  const { seasonId } = req.params;
+  const { questions } = req.body;
+
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return res.status(400).json({ success: false, error: 'Request body must contain an array of questions.' });
+  }
+
+  try {
+    const insertedQuestions = [];
+    for (const q of questions) {
+      const { question, options, correctAnswer, category, difficulty, timeLimit = 30 } = q;
+      if (!question || !options || !correctAnswer || !category || !difficulty) {
+        console.warn('Skipping question due to missing fields:', q);
+        continue; 
+      }
+      if (!Array.isArray(options) || options.length < 2 || !options.includes(correctAnswer)) {
+        console.warn('Skipping question due to invalid options/correctAnswer:', q);
+        continue;
+      }
+
+      const newQuestion = await db.one(
+        `INSERT INTO questions (season_id, question, options, correct_answer, category, difficulty, time_limit, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, question, options, correct_answer AS "correctAnswer", category, difficulty, time_limit AS "timeLimit", season_id`,
+        [seasonId, question, options, correctAnswer, category, difficulty, timeLimit, req.user.id]
+      );
+      insertedQuestions.push(newQuestion);
+    }
+    res.status(201).json({ success: true, message: `${insertedQuestions.length} questions added to season ${seasonId}.`, questions: insertedQuestions });
+  } catch (error) {
+    console.error(`Error adding questions to season ${seasonId}:`, error);
+    res.status(500).json({ success: false, error: 'Failed to add questions to season', details: error.message });
+  }
+}));
+
+// Get qualified users for a specific season
+router.get('/seasons/:seasonId/qualified-users', isAdmin, asyncHandler(async (req, res) => {
+  const { seasonId } = req.params;
+  try {
+    const season = await db.oneOrNone('SELECT id, minimum_score_percentage FROM seasons WHERE id = $1', [seasonId]);
+    if (!season) {
+      return res.status(404).json({ success: false, error: 'Season not found' });
+    }
+    if (typeof season.minimum_score_percentage !== 'number') {
+        return res.status(400).json({ success: false, error: 'Season minimum_score_percentage is not properly configured.' });
+    }
+
+    const qualifiedUsers = await db.any(
+      `SELECT 
+         u.id, 
+         u.username, 
+         u.email, 
+         uqa.score,
+         uqa.total_questions,
+         uqa.completed_at,
+         (uqa.score * 100.0 / uqa.total_questions) as percentage_score
+       FROM users u
+       JOIN user_quiz_attempts uqa ON u.id = uqa.user_id
+       WHERE uqa.season_id = $1 AND uqa.completed = true 
+         AND (uqa.score * 100.0 / uqa.total_questions) >= $2
+       ORDER BY percentage_score DESC, uqa.completed_at ASC;`,
+      [seasonId, season.minimum_score_percentage]
+    );
+    res.json(qualifiedUsers);
+  } catch (error) {
+    console.error(`Error fetching qualified users for season ${seasonId}:`, error);
+    res.status(500).json({ success: false, error: 'Failed to fetch qualified users', details: error.message });
   }
 }));
 
