@@ -70,6 +70,9 @@ router.get('/:id', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
 // Create a new season
 router.post('/', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
+    console.log('Raw request body:', JSON.stringify(req.body, null, 2));
+    console.log('Request headers:', req.headers);
+    
     const { 
       name, 
       start_date, 
@@ -79,9 +82,22 @@ router.post('/', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
       minimum_score_percentage 
     } = req.body;
     
+    console.log('Parsed values:', {
+      name,
+      start_date,
+      end_date,
+      is_active,
+      is_qualification_round,
+      minimum_score_percentage
+    });
+    
     // Validate required fields
     if (!name || !start_date || !end_date) {
-      return res.status(400).json({ message: 'Name, start date, and end date are required' });
+      console.log('Validation failed - missing required fields');
+      return res.status(400).json({ 
+        message: 'Name, start date, and end date are required',
+        received: { name, start_date, end_date }
+      });
     }
     
     // If setting this season as active, deactivate all other seasons
