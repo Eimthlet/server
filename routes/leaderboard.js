@@ -6,6 +6,7 @@ const router = express.Router();
 
 // Get leaderboard of top quiz performers
 router.get('/', authenticateUser, async (req, res) => {
+  const { range } = req.query; // 'monthly' or 'all-time'
   try {
     const leaderboard = await db.any(
       `SELECT 
@@ -23,6 +24,7 @@ router.get('/', authenticateUser, async (req, res) => {
         quiz_progress qp ON uqa.id = qp.attempt_id
       WHERE 
         uqa.completed = true
+        ${range === 'monthly' ? "AND strftime('%Y-%m', uqa.completed_at) = strftime('%Y-%m', 'now')" : ""}
       GROUP BY 
         u.id, u.username, uqa.score, uqa.completed_at
       ORDER BY 
@@ -43,6 +45,7 @@ router.get('/', authenticateUser, async (req, res) => {
             user_quiz_attempts
           WHERE 
             completed = true
+            ${range === 'monthly' ? "AND strftime('%Y-%m', completed_at) = strftime('%Y-%m', 'now')" : ""}
         ) as rankings
         WHERE user_id = $1`,
         [req.user.id]
