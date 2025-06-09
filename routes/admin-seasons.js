@@ -70,8 +70,30 @@ router.get('/:id', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
 // Create a new season
 router.post('/', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
-    console.log('Raw request body:', JSON.stringify(req.body, null, 2));
+    // Log raw request body and headers
+    console.log('=== New Season Creation Request ===');
+    console.log('Raw request body type:', typeof req.body);
+    console.log('Raw request body:', req.body);
     console.log('Request headers:', req.headers);
+    
+    // Check if body is empty
+    if (!req.body || Object.keys(req.body).length === 0) {
+      console.error('Request body is empty or undefined');
+      return res.status(400).json({ 
+        message: 'Request body is empty',
+        received: req.body
+      });
+    }
+    
+    // Log each field separately
+    console.log('Request body fields:', {
+      name: req.body.name,
+      start_date: req.body.start_date,
+      end_date: req.body.end_date,
+      is_active: req.body.is_active,
+      is_qualification_round: req.body.is_qualification_round,
+      minimum_score_percentage: req.body.minimum_score_percentage
+    });
     
     const { 
       name, 
