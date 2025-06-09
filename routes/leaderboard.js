@@ -24,7 +24,7 @@ router.get('/', authenticateUser, async (req, res) => {
         quiz_progress qp ON uqa.id = qp.attempt_id
       WHERE 
         uqa.completed = true
-        ${range === 'monthly' ? "AND strftime('%Y-%m', uqa.completed_at) = strftime('%Y-%m', 'now')" : ""}
+        ${range === 'monthly' ? "AND TO_CHAR(uqa.completed_at, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM')" : ""}
       GROUP BY 
         u.id, u.username, uqa.score, uqa.completed_at
       ORDER BY 
@@ -45,7 +45,7 @@ router.get('/', authenticateUser, async (req, res) => {
             user_quiz_attempts
           WHERE 
             completed = true
-            ${range === 'monthly' ? "AND strftime('%Y-%m', completed_at) = strftime('%Y-%m', 'now')" : ""}
+            ${range === 'monthly' ? "AND TO_CHAR(completed_at, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM')" : ""}
         ) as rankings
         WHERE user_id = $1`,
         [req.user.id]
