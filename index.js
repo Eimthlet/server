@@ -174,8 +174,8 @@ app.post("/api/quiz/start", async (req, res) => {
     
     // Check if user has already played
     const hasPlayed = await db.oneOrNone(
-      `SELECT id FROM quiz_attempts 
-       WHERE user_id = $1 AND is_qualification = true 
+      `SELECT id FROM user_quiz_attempts 
+       WHERE user_id = $1 
        LIMIT 1`,
       [userId]
     );
@@ -192,10 +192,14 @@ app.post("/api/quiz/start", async (req, res) => {
        LIMIT 10`
     );
 
+    if (!questions || questions.length === 0) {
+      throw new Error('No qualification questions found');
+    }
+
     // Create a new quiz attempt and return the ID
     const { id: attemptId } = await db.one(
-      `INSERT INTO quiz_attempts (user_id, is_qualification, started_at) 
-       VALUES ($1, true, NOW())
+      `INSERT INTO user_quiz_attempts (user_id, started_at) 
+       VALUES ($1, NOW())
        RETURNING id`,
       [userId]
     );
@@ -217,7 +221,8 @@ app.post("/api/quiz/start", async (req, res) => {
     }
     res.status(500).json({ 
       error: 'Failed to start qualification quiz',
-      message: error.message 
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
