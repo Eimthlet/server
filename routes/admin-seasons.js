@@ -190,6 +190,26 @@ router.put('/:id', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   }
 }));
 
+// Activate a season
+router.put('/:id/activate', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Deactivate all other seasons first to ensure only one is active
+    await db.tx(async t => {
+      await t.none('UPDATE seasons SET is_active = false WHERE is_active = true');
+      await t.none('UPDATE seasons SET is_active = true WHERE id = $1', [id]);
+    });
+
+    const activatedSeason = await db.one('SELECT * FROM seasons WHERE id = $1', [id]);
+    
+    res.json(activatedSeason);
+  } catch (error) {
+    console.error('Error activating season:', error);
+    throw error;
+  }
+}));
+
 // Delete a season
 router.delete('/:id', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
