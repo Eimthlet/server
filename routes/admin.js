@@ -613,7 +613,7 @@ router.post('/rounds', isAdmin, asyncHandler(async (req, res) => {
 
   const query = `
     INSERT INTO rounds (name, start_date, end_date, season_id, round_number, is_active)
-    VALUES ($1, $2, $3, $4, $5, 0)
+    VALUES ($1, $2, $3, $4, $5, false)
     RETURNING id
   `;
 
