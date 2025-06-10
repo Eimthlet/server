@@ -9,21 +9,7 @@ const router = express.Router();
 router.get('/', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
     const seasons = await db.any(`
-      SELECT 
-        s.*,
-        COUNT(DISTINCT q.id) as question_count,
-        COUNT(DISTINCT uqa.id) as attempts_count,
-        COUNT(DISTINCT CASE WHEN uqa.qualifies_for_next_round = true THEN uqa.user_id END) as qualified_users_count
-      FROM 
-        seasons s
-      LEFT JOIN 
-        questions q ON s.id = q.season_id
-      LEFT JOIN 
-        user_quiz_attempts uqa ON s.id = uqa.season_id
-      GROUP BY 
-        s.id
-      ORDER BY 
-        s.created_at DESC
+      SELECT * FROM seasons ORDER BY created_at DESC
     `);
 
     res.json(seasons);
