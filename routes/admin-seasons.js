@@ -323,6 +323,61 @@ router.get('/:id/qualified-users', authenticateUser, isAdmin, asyncHandler(async
   }
 }));
 
+// Get questions for a season
+router.get('/:id/questions', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if season exists
+    const existingSeason = await db.oneOrNone('SELECT * FROM seasons WHERE id = $1', [id]);
+    if (!existingSeason) {
+      return res.status(404).json({ message: 'Season not found' });
+    }
+    
+    // Get questions for this season
+    const questions = await db.any(
+      `SELECT * FROM questions WHERE season_id = $1 ORDER BY id`,
+      [id]
+    );
+    
+    res.json(questions);
+  } catch (error) {
+    console.error('Error fetching season questions:', error);
+    throw error;
+  }
+}));
+
+// Delete a question from a season
+router.delete('/:id/questions/:questionId', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id, questionId } = req.params;
+    
+    // Check if season exists
+    const existingSeason = await db.oneOrNone('SELECT * FROM seasons WHERE id = $1', [id]);
+    if (!existingSeason) {
+      return res.status(404).json({ message: 'Season not found' });
+    }
+    
+    // Check if question exists and belongs to this season
+    const question = await db.oneOrNone(
+      'SELECT * FROM questions WHERE id = $1 AND season_id = $2',
+      [questionId, id]
+    );
+    
+    if (!question) {
+      return res.status(404).json({ message: 'Question not found in this season' });
+    }
+    
+    // Delete the question
+    await db.none('DELETE FROM questions WHERE id = $1', [questionId]);
+    
+    res.json({ message: 'Question deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting question:', error);
+    throw error;
+  }
+}));
+
 // Add questions to a season
 router.post('/:id/questions', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
