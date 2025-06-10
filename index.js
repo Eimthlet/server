@@ -161,6 +161,72 @@ app.use('/progress', progressRoutes);
 app.use('/leaderboard', leaderboardRoutes); // Changed from /api/results/leaderboard
 app.use('/qualification', qualificationRoutes);
 
+// Direct API route for starting quiz
+app.post("/api/quiz/start", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.id;
+
+    // Check if user has already played
+    const hasPlayed = await new Promise((resolve, reject) => {
+      db.get(
+        'SELECT id FROM quiz_attempts WHERE user_id = ? AND is_qualification = 1',
+        [userId],
+        (err, row) => {
+          if (err) reject(err);
+          resolve(!!row);
+        }
+      );
+    });
+
+    if (hasPlayed) {
+      return res.status(400).json({ error: 'You have already attempted the qualification' });
+    }
+
+    // Get random questions for the quiz
+    const questions = await new Promise((resolve, reject) => {
+      db.all(
+        'SELECT * FROM questions WHERE is_qualification = 1 ORDER BY RANDOM() LIMIT 10',
+        [],
+        (err, rows) => {
+          if (err) reject(err);
+          resolve(rows);
+        }
+      );
+    });
+
+    // Create a new quiz attempt
+    const attemptId = await new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO quiz_attempts (user_id, is_qualification, started_at) VALUES (?, 1, CURRENT_TIMESTAMP)',
+        [userId],
+        function(err) {
+          if (err) reject(err);
+          resolve(this.lastID);
+        }
+      );
+    });
+
+    res.json({
+      success: true,
+      attemptId,
+      questions: questions.map(q => ({
+        id: q.id,
+        question: q.question,
+        options: [q.option1, q.option2, q.option3, q.option4],
+        correctAnswer: q.correct_answer
+      }))
+    });
+  } catch (error) {
+    console.error('Error starting qualification quiz:', error);
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    res.status(500).json({ error: 'Failed to start qualification quiz' });
+  }
+});
+
 // 404 Handler for API routes
 app.use('*', (req, res) => {
   res.status(404).json({ error: 'API endpoint not found' });
