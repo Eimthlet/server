@@ -15,6 +15,7 @@ import adminRoutes from './routes/admin.js';
 import adminQuizRoutes from './routes/admin-quiz.js';
 import adminSeasonsRoutes from './routes/admin-seasons.js';
 import adminUsersRoutes from './routes/admin-users.js';
+import adminRoundsRoutes from './routes/admin-rounds.js';
 import resultsRoutes from "./routes/results.js";
 import questionsRoutes from "./routes/questions.js";
 import quizRoutes from "./routes/quiz.js";
@@ -152,8 +153,9 @@ app.use('/', paychanguRoutes);
 app.use('/admin', isAdmin, adminRoutes);
 app.use('/admin/quiz', isAdmin, adminQuizRoutes);
 app.use('/admin/seasons', isAdmin, adminSeasonsRoutes);
-app.use('/admin/users', isAdmin, adminUsersRoutes); // New admin users route
-app.use('/admin/migrations', isAdmin, migrationsRoutes); // Migrations route for database updates
+app.use('/admin/users', isAdmin, adminUsersRoutes); // Admin users management
+app.use('/admin/rounds', isAdmin, adminRoundsRoutes); // Qualification rounds management
+app.use('/admin/migrations', isAdmin, migrationsRoutes); // Database migrations
 app.use('/questions', questionsRoutes);
 app.use('/quiz', quizRoutes);
 app.use('/results', resultsRoutes);
@@ -172,47 +174,68 @@ app.post("/api/quiz/start", async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.id;
     
-    // Check if user has already played
+    // Get the current active qualification round
+    const currentRound = await db.oneOrNone(
+      `SELECT id FROM rounds 
+       WHERE is_active = true 
+       AND (end_date IS NULL OR end_date > NOW())
+       ORDER BY start_date DESC
+       LIMIT 1`
+    );
+
+    if (!currentRound) {
+      return res.status(400).json({ error: 'No active qualification round found' });
+    }
+    
+    // Check if user has already attempted this round
     const hasPlayed = await db.oneOrNone(
       `SELECT id FROM user_quiz_attempts 
-       WHERE user_id = $1 
+       WHERE user_id = $1 AND round_id = $2
        LIMIT 1`,
-      [userId]
+      [userId, currentRound.id]
     );
 
     if (hasPlayed) {
-      return res.status(400).json({ error: 'You have already attempted the qualification' });
+      return res.status(400).json({ error: 'You have already attempted this qualification round' });
     }
 
-    // Get random questions for the quiz using PostgreSQL's RANDOM()
+    // Get questions for the current qualification round
     const questions = await db.any(
       `SELECT * FROM questions 
-       WHERE is_qualification = true 
+       WHERE round_id = $1
        ORDER BY RANDOM() 
-       LIMIT 10`
+       LIMIT 10`,
+      [currentRound.id]
     );
 
     if (!questions || questions.length === 0) {
-      throw new Error('No qualification questions found');
+      return res.status(400).json({ 
+        error: 'No questions available for this qualification round',
+        details: 'Please contact an administrator to set up questions for this round.'
+      });
     }
 
-    // Create a new quiz attempt and return the ID
+    // Create a new quiz attempt for this round
     const { id: attemptId } = await db.one(
-      `INSERT INTO user_quiz_attempts (user_id, started_at) 
-       VALUES ($1, NOW())
+      `INSERT INTO user_quiz_attempts (user_id, round_id, started_at) 
+       VALUES ($1, $2, NOW())
        RETURNING id`,
-      [userId]
+      [userId, currentRound.id]
     );
+
+    // Format questions for the client
+    const formattedQuestions = questions.map(q => ({
+      id: q.id,
+      question: q.question,
+      options: q.options,  // Assuming options is stored as an array
+      correctAnswer: q.correct_answer
+    }));
 
     res.json({
       success: true,
       attemptId,
-      questions: questions.map(q => ({
-        id: q.id,
-        question: q.question,
-        options: [q.option1, q.option2, q.option3, q.option4],
-        correctAnswer: q.correct_answer
-      }))
+      roundId: currentRound.id,
+      questions: formattedQuestions
     });
   } catch (error) {
     console.error('Error starting qualification quiz:', error);
