@@ -28,20 +28,21 @@ router.put('/:id/activate', authenticateUser, isAdmin, asyncHandler(async (req, 
       return result;
     });
     
-    // Fetch the updated season with all its data
+    // Fetch the updated season with all counts
     const updatedSeason = await db.one(
       `SELECT 
         s.*, 
         COUNT(DISTINCT q.id) as question_count,
         COUNT(DISTINCT uqa.id) as attempts_count,
-        COUNT(DISTINCT CASE WHEN uqa.qualifies_for_next_round = true THEN uqa.user_id END) as qualified_users_count
+        COUNT(DISTINCT CASE 
+          WHEN uqa.qualifies_for_next_round = true AND uqa.percentage_score >= s.minimum_score_percentage 
+          THEN uqa.user_id 
+        END) as qualified_users_count
       FROM seasons s
       LEFT JOIN questions q ON s.id = q.season_id
       LEFT JOIN user_quiz_attempts uqa ON s.id = uqa.season_id
       WHERE s.id = $1
-      GROUP BY 
-        s.id, s.name, s.start_date, s.end_date, s.is_active, s.description, 
-        s.minimum_score_percentage, s.is_qualification_round, s.created_at, s.updated_at`,
+      GROUP BY s.id`,
       [id]
     );
     
