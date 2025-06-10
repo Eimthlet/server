@@ -165,48 +165,40 @@ app.use('/qualification', qualificationRoutes);
 app.post("/api/quiz/start", async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.id;
-
+    
     // Check if user has already played
-    const hasPlayed = await new Promise((resolve, reject) => {
-      db.get(
-        'SELECT id FROM quiz_attempts WHERE user_id = ? AND is_qualification = 1',
-        [userId],
-        (err, row) => {
-          if (err) reject(err);
-          resolve(!!row);
-        }
-      );
-    });
+    const hasPlayed = await db.oneOrNone(
+      `SELECT id FROM quiz_attempts 
+       WHERE user_id = $1 AND is_qualification = true 
+       LIMIT 1`,
+      [userId]
+    );
 
     if (hasPlayed) {
       return res.status(400).json({ error: 'You have already attempted the qualification' });
     }
 
-    // Get random questions for the quiz
-    const questions = await new Promise((resolve, reject) => {
-      db.all(
-        'SELECT * FROM questions WHERE is_qualification = 1 ORDER BY RANDOM() LIMIT 10',
-        [],
-        (err, rows) => {
-          if (err) reject(err);
-          resolve(rows);
-        }
-      );
-    });
+    // Get random questions for the quiz using PostgreSQL's RANDOM()
+    const questions = await db.any(
+      `SELECT * FROM questions 
+       WHERE is_qualification = true 
+       ORDER BY RANDOM() 
+       LIMIT 10`
+    );
 
-    // Create a new quiz attempt
-    const attemptId = await new Promise((resolve, reject) => {
-      db.run(
-        'INSERT INTO quiz_attempts (user_id, is_qualification, started_at) VALUES (?, 1, CURRENT_TIMESTAMP)',
-        [userId],
-        function(err) {
-          if (err) reject(err);
-          resolve(this.lastID);
-        }
-      );
-    });
+    // Create a new quiz attempt and return the ID
+    const { id: attemptId } = await db.one(
+      `INSERT INTO quiz_attempts (user_id, is_qualification, started_at) 
+       VALUES ($1, true, NOW())
+       RETURNING id`,
+      [userId]
+    );
 
     res.json({
       success: true,
@@ -223,7 +215,10 @@ app.post("/api/quiz/start", async (req, res) => {
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ error: 'Invalid token' });
     }
-    res.status(500).json({ error: 'Failed to start qualification quiz' });
+    res.status(500).json({ 
+      error: 'Failed to start qualification quiz',
+      message: error.message 
+    });
   }
 });
 
