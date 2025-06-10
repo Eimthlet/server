@@ -115,9 +115,24 @@ app.use((req, res, next) => {
  *       200:
  *         description: API is running
  */
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+app.get('/api/health-check', asyncHandler(async (req, res) => {
+  try {
+    // Perform a simple query to keep the database connection alive
+    await db.query('SELECT 1');
+    res.status(200).json({ 
+      status: 'ok', 
+      message: 'Server and database are healthy.',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(503).json({ 
+      status: 'error', 
+      message: 'Database connection failed.',
+      error: error.message
+    });
+  }
+}));
 
 // Add this before other routes
 app.get('/auth', (req, res) => {
