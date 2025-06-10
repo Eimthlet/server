@@ -5,6 +5,50 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 
+// Activate a season (deactivates all others)
+router.put('/:id/activate', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Start a transaction
+    await db.tx(async t => {
+      // First deactivate all seasons
+      await t.none('UPDATE seasons SET is_active = false');
+      
+      // Then activate the selected season
+      const result = await t.oneOrNone(
+        'UPDATE seasons SET is_active = true WHERE id = $1 RETURNING *',
+        [id]
+      );
+      
+      if (!result) {
+        throw new Error('Season not found');
+      }
+      
+      return result;
+    });
+    
+    // Fetch the updated season with all its data
+    const updatedSeason = await db.one(
+      `SELECT s.*, 
+              COUNT(DISTINCT q.id) as question_count,
+              COUNT(DISTINCT uqa.id) as attempts_count,
+              COUNT(DISTINCT CASE WHEN uqa.qualifies_for_next_round = true THEN uqa.user_id END) as qualified_users_count
+       FROM seasons s
+       LEFT JOIN questions q ON s.id = q.season_id
+       LEFT JOIN user_quiz_attempts uqa ON s.id = uqa.season_id
+       WHERE s.id = $1
+       GROUP BY s.id`,
+      [id]
+    );
+    
+    res.json(updatedSeason);
+  } catch (error) {
+    console.error('Error activating season:', error);
+    throw error;
+  }
+}));
+
 // Get all seasons
 router.get('/', authenticateUser, isAdmin, asyncHandler(async (req, res) => {
   try {
