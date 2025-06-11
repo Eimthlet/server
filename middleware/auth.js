@@ -113,11 +113,29 @@ export const isAdmin = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    if (decoded.isAdmin !== true) {
-      return res.status(403).json({ error: 'Admin access required', details: 'Token valid, but user is not an administrator.' });
+    // Get the user from the database to verify admin status
+    const user = await db.oneOrNone('SELECT id, email, role FROM users WHERE id = $1', [decoded.id]);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found', details: 'The user associated with this token does not exist.' });
     }
-
-    req.user = decoded; // Set req.user if this middleware had to do the decoding
+    
+    // Check if user has admin role
+    if (user.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'Admin access required', 
+        details: 'Token valid, but user does not have administrator privileges.' 
+      });
+    }
+    
+    // Set the user on the request object
+    req.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      isAdmin: user.role === 'admin'
+    };
+    
     next();
   } catch (error) {
     console.error('Admin check error (fallback path):', error);

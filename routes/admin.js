@@ -909,7 +909,7 @@ router.get('/dashboard-stats', isAdmin, asyncHandler(async (req, res) => {
 // Season management endpoints
 
 // Get all seasons
-router.get('/seasons', isAdmin, asyncHandler(async (req, res) => {
+router.get('/seasons', asyncHandler(async (req, res) => {
   try {
     const seasons = await db.any('SELECT * FROM seasons ORDER BY start_date DESC');
     res.json(seasons);

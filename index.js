@@ -47,13 +47,14 @@ const corsOptions = {
       'https://car-quizz.vercel.app',
       'https://car-quizz.onrender.com',
       'http://localhost:3000',
+      'http://localhost:3001',
       process.env.FRONTEND_URL || 'http://localhost:3000'
     ];
 
     // Allow all Vercel preview deployments
     const isVercelPreview = origin && (
       origin.endsWith('-jonathans-projects-8c96c19b.vercel.app') ||
-      origin.includes('car-quizz-git-') ||
+      origin.includes('car-quiz-git-') ||
       whitelist.includes(origin)
     );
     
@@ -64,11 +65,27 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  exposedHeaders: ['Set-Cookie'],
-  maxAge: 86400 // 24 hours
+  credentials: true, // Required for cookies, authorization headers with credentials
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'X-CSRF-Token',
+    'X-Requested-With',
+    'X-Requested-By',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Credentials'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  exposedHeaders: [
+    'Set-Cookie',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Credentials'
+  ],
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
 // Apply middleware
@@ -82,11 +99,24 @@ app.options('*', cors(corsOptions));
 // Mount API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/paychangu', paychanguRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/admin/quiz', adminQuizRoutes);
-app.use('/api/admin/seasons', adminSeasonsRoutes);
-app.use('/api/admin/users', adminUsersRoutes);
-app.use('/api/admin/rounds', adminRoundsRoutes);
+
+// Mount admin routes under a single prefix with admin middleware
+const adminRouter = express.Router();
+
+// Apply isAdmin middleware to all admin routes
+adminRouter.use(isAdmin);
+
+// Mount all admin routes
+adminRouter.use('', adminRoutes);
+adminRouter.use('/quiz', adminQuizRoutes);
+adminRouter.use('/seasons', adminSeasonsRoutes);
+adminRouter.use('/users', adminUsersRoutes);
+adminRouter.use('/rounds', adminRoundsRoutes);
+
+// Mount the admin router at /api/admin
+app.use('/api/admin', adminRouter);
+
+// Mount other API routes
 app.use('/api/results', resultsRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/quiz', quizRoutes);
