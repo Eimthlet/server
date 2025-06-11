@@ -35,7 +35,8 @@ router.post('/start-qualification',
   async (req, res) => {
     console.log('[/quiz/start-qualification] Request received');
     console.log('User ID:', req.user?.id);
-  const userId = req.user.id;
+    const userId = req.user.id;
+    console.log('Starting qualification process for user:', userId);
   
   try {
     // Find the active qualification round
@@ -77,51 +78,85 @@ router.post('/start-qualification',
       });
     }
 
-    // Get questions for the qualification round
-    const questions = await db.any(
-      `SELECT id, question, options, correct_answer, category, difficulty, time_limit 
-       FROM questions 
-       WHERE season_id = $1 
-       ORDER BY RANDOM()`,
-      [qualificationRound.id]
-    );
+    try {
+      console.log('Fetching questions for qualification round:', qualificationRound.id);
+      // Get questions for the qualification round
+      const questions = await db.any(
+        `SELECT id, question, options, correct_answer, category, difficulty, time_limit 
+         FROM questions 
+         WHERE season_id = $1 
+         ORDER BY RANDOM()`,
+        [qualificationRound.id]
+      );
 
-    if (questions.length === 0) {
-      console.error('No questions found for qualification round:', qualificationRound.id);
-      return res.status(404).json({ 
-        success: false, 
-        message: 'No questions found for qualification round' 
+      console.log(`Found ${questions.length} questions for qualification round`);
+      
+      if (questions.length === 0) {
+        console.error('No questions found for qualification round:', qualificationRound.id);
+        return res.status(404).json({ 
+          success: false, 
+          message: 'No questions found for qualification round',
+          code: 'NO_QUESTIONS_FOUND'
+        });
+      }
+      
+      // Log first question (without answer) for debugging
+      if (questions.length > 0) {
+        const { correct_answer, ...firstQuestion } = questions[0];
+        console.log('Sample question (first one):', firstQuestion);
+      }
+
+      // Create a new quiz attempt
+      console.log('Creating new quiz attempt...');
+      const newAttempt = await db.one(
+        `INSERT INTO user_quiz_attempts 
+         (user_id, season_id, started_at, total_questions_in_attempt) 
+         VALUES ($1, $2, NOW(), $3)
+         RETURNING id`,
+        [userId, qualificationRound.id, questions.length]
+      );
+      const attemptId = newAttempt.id;
+      console.log('Created quiz attempt with ID:', attemptId);
+
+      // Prepare response
+      const responseData = {
+        success: true,
+        attemptId,
+        questions: questions.map(q => ({
+          id: q.id,
+          question: q.question,
+          options: q.options,
+          category: q.category,
+          difficulty: q.difficulty,
+          timeLimit: q.time_limit || 30
+        })),
+        totalQuestions: questions.length,
+        minimumScorePercentage: qualificationRound.minimum_score_percentage
+      };
+      
+      console.log('Sending response with', questions.length, 'questions');
+      res.json(responseData);
+      console.log('Response sent successfully');
+      
+    } catch (error) {
+      console.error('Error in question/attempt handling:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        code: error.code,
+        user: userId,
+        timestamp: new Date().toISOString()
       });
+      
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          success: false, 
+          message: 'Error starting qualification attempt',
+          error: error.message,
+          code: 'QUALIFICATION_START_ERROR'
+        });
+      }
     }
-    
-    console.log(`Found ${questions.length} questions for qualification round`);
-
-    // Create a new quiz attempt
-    const newAttempt = await db.one(
-      `INSERT INTO user_quiz_attempts 
-       (user_id, season_id, started_at, total_questions_in_attempt) 
-       VALUES ($1, $2, NOW(), $3)
-       RETURNING id`,
-      [userId, qualificationRound.id, questions.length]
-    );
-    const attemptId = newAttempt.id;
-
-    // Return the questions and attempt ID
-    res.json({
-      success: true,
-      attemptId,
-      questions: questions.map(q => ({
-        id: q.id,
-        question: q.question,
-        options: q.options,
-        category: q.category,
-        difficulty: q.difficulty,
-        timeLimit: q.time_limit || 30
-      })),
-      totalQuestions: questions.length,
-      minimumScorePercentage: qualificationRound.minimum_score_percentage
-    });
-
   } catch (error) {
     console.error('Error in /quiz/start-qualification:', {
       message: error.message,
