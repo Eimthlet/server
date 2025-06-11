@@ -61,7 +61,7 @@ router.post('/start-qualification',
        WHERE user_id = $1 
        AND season_id = $2 
        AND completed = false 
-       ORDER BY created_at DESC 
+       ORDER BY started_at DESC 
        LIMIT 1`,
       [userId, qualificationRound.id]
     );
