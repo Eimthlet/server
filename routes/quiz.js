@@ -33,6 +33,8 @@ router.post('/start-qualification',
   authenticateUser, 
   canAttemptQualification,
   async (req, res) => {
+    console.log('[/quiz/start-qualification] Request received');
+    console.log('User ID:', req.user?.id);
   const userId = req.user.id;
   
   try {
@@ -80,17 +82,19 @@ router.post('/start-qualification',
       `SELECT id, question, options, correct_answer, category, difficulty, time_limit 
        FROM questions 
        WHERE season_id = $1 
-       ORDER BY RANDOM() 
-       LIMIT 15`, // Or your desired question count
+       ORDER BY RANDOM()`,
       [qualificationRound.id]
     );
 
     if (questions.length === 0) {
+      console.error('No questions found for qualification round:', qualificationRound.id);
       return res.status(404).json({ 
         success: false, 
         message: 'No questions found for qualification round' 
       });
     }
+    
+    console.log(`Found ${questions.length} questions for qualification round`);
 
     // Create a new quiz attempt
     const newAttempt = await db.one(
@@ -119,12 +123,25 @@ router.post('/start-qualification',
     });
 
   } catch (error) {
-    console.error('Error starting qualification attempt:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to start qualification attempt',
-      error: error.message 
+    console.error('Error in /quiz/start-qualification:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      name: error.name,
+      user: req.user?.id,
+      timestamp: new Date().toISOString()
     });
+    
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to start qualification attempt',
+        error: error.message,
+        code: error.code
+      });
+    } else {
+      console.error('Headers already sent, could not send error response');
+    }
   }
 });
 
