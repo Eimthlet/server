@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticateUser } from '../middleware/auth.js';
+import { canAttemptQualification } from '../middleware/seasonAccess.js';
 import db from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 
