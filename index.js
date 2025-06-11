@@ -74,7 +74,10 @@ const corsOptions = {
 // Apply middleware
 app.use(express.json());
 app.use(cookieParser());
+
+// Apply CORS middleware before routes
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
@@ -96,10 +99,6 @@ app.use('/api/migrations', migrationsRoutes);
 if (process.env.NODE_ENV !== 'production') {
   setupSwagger(app);
 }
-
-// Apply CORS middleware for all routes
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
 // Cookie configuration middleware
 app.use(cookieParser());
