@@ -30,6 +30,27 @@ import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
 
 // Initialize Express app
 const app = express();
+
+// Apply middleware
+app.use(express.json());
+app.use(cookieParser());
+app.use(cors(corsOptions));
+
+// Mount API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/paychangu', paychanguRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/quiz', adminQuizRoutes);
+app.use('/api/admin/seasons', adminSeasonsRoutes);
+app.use('/api/admin/users', adminUsersRoutes);
+app.use('/api/admin/rounds', adminRoundsRoutes);
+app.use('/api/results', resultsRoutes);
+app.use('/api/questions', questionsRoutes);
+app.use('/api/quiz', quizRoutes);
+app.use('/api/progress', progressRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/qualification', qualificationRoutes);
+app.use('/api/migrations', migrationsRoutes);
 const port = process.env.PORT || 5000;
 
 // Setup Swagger documentation
