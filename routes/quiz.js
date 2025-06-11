@@ -72,48 +72,59 @@ router.post('/start-qualification',
       
     if (activeAttempt) {
       console.log('Found existing active attempt:', activeAttempt.id);
-      // Update the season_id if it was NULL
-      if (activeAttempt.season_id === null) {
-        console.log('Updating season_id for existing attempt');
-        await db.none(
-          `UPDATE quiz_sessions 
-           SET season_id = $1 
-           WHERE id = $2`,
-          [qualificationRound.id, activeAttempt.id]
+      
+      try {
+        // Update the season_id if it was NULL
+        if (activeAttempt.season_id === null) {
+          console.log('Updating season_id for existing attempt');
+          await db.none(
+            `UPDATE quiz_sessions 
+             SET season_id = $1, 
+                 updated_at = NOW() 
+             WHERE id = $2`,
+            [qualificationRound.id, activeAttempt.id]
+          );
+        }
+
+        // First, check if we have questions for this attempt
+        console.log('Checking for existing questions for attempt:', activeAttempt.id);
+        const existingQuestions = await db.any(
+          `SELECT q.id, q.question, q.options, q.category, q.difficulty
+           FROM questions q
+           JOIN quiz_session_questions qsq ON q.id = qsq.question_id
+           WHERE qsq.quiz_session_id = $1
+           ORDER BY qsq.question_order`,
+          [activeAttempt.id]
         );
+
+        if (existingQuestions.length > 0) {
+          console.log(`Found ${existingQuestions.length} existing questions for attempt ${activeAttempt.id}`);
+          
+          const responseData = {
+            success: true,
+            attemptId: activeAttempt.id,
+            questions: existingQuestions.map(q => ({
+              id: q.id,
+              question: q.question,
+              options: q.options,
+              category: q.category,
+              difficulty: q.difficulty
+            })),
+            totalQuestions: existingQuestions.length,
+            minimumScore: qualificationRound.minimum_score_percentage,
+            isExistingAttempt: true
+          };
+          
+          console.log('Sending existing attempt data with questions');
+          return res.json(responseData);
+        } else {
+          console.log('No questions found for existing attempt, creating new questions...');
+          // If no questions exist for this attempt, we'll continue to create new ones
+        }
+      } catch (error) {
+        console.error('Error handling existing attempt:', error);
+        // Continue to create a new attempt if there's an error
       }
-
-      // Fetch questions for the existing attempt
-      console.log('Fetching questions for existing attempt...');
-      const questions = await db.any(
-        `SELECT q.id, q.question, q.options, q.category, q.difficulty
-         FROM questions q
-         JOIN quiz_session_questions qsq ON q.id = qsq.question_id
-         WHERE qsq.quiz_session_id = $1
-         ORDER BY qsq.question_order`,
-        [activeAttempt.id]
-      );
-
-      console.log(`Found ${questions.length} questions for attempt ${activeAttempt.id}`);
-      
-      // Return the existing attempt with questions
-      const responseData = {
-        success: true,
-        attemptId: activeAttempt.id,
-        questions: questions.map(q => ({
-          id: q.id,
-          question: q.question,
-          options: q.options,
-          category: q.category,
-          difficulty: q.difficulty
-        })),
-        totalQuestions: questions.length,
-        minimumScore: qualificationRound.minimum_score_percentage,
-        isExistingAttempt: true
-      };
-      
-      console.log('Sending existing attempt data:', JSON.stringify(responseData, null, 2));
-      return res.json(responseData);
     }
 
     try {
@@ -144,43 +155,70 @@ router.post('/start-qualification',
         console.log('Sample question (first one):', firstQuestion);
       }
 
-      // Create a new quiz attempt
+        // Create a new quiz attempt
       console.log(`Creating new quiz attempt with ${questions.length} questions for user ${userId} in season ${qualificationRound.id}...`);
       let attemptId;
+      
       try {
-        const newAttempt = await db.one(
-          `INSERT INTO quiz_sessions 
-           (user_id, season_id, started_at, total_questions, total_questions_in_attempt) 
-           VALUES ($1, $2, NOW(), $3, $3)
-           RETURNING id`,
-          [userId, qualificationRound.id, questions.length]
-        );
-        attemptId = newAttempt.id;
-        console.log(`Created new quiz attempt with ID: ${attemptId}`);
-      } catch (dbError) {
-        console.error('Database error creating quiz attempt:', dbError);
-        throw new Error(`Database error: ${dbError.message}`);
+        // Start a database transaction
+        await db.tx(async t => {
+          // 1. Create the quiz session
+          const newAttempt = await t.one(
+            `INSERT INTO quiz_sessions 
+             (user_id, season_id, started_at, total_questions, total_questions_in_attempt) 
+             VALUES ($1, $2, NOW(), $3, $3)
+             RETURNING id`,
+            [userId, qualificationRound.id, questions.length]
+          );
+          
+          attemptId = newAttempt.id;
+          console.log(`Created new quiz attempt with ID: ${attemptId}`);
+          
+          // 2. Associate questions with this quiz session
+          const questionInserts = questions.map((question, index) => {
+            return t.none(
+              `INSERT INTO quiz_session_questions 
+               (quiz_session_id, question_id, question_order, created_at, updated_at)
+               VALUES ($1, $2, $3, NOW(), NOW())`,
+              [attemptId, question.id, index + 1]
+            );
+          });
+          
+          // Execute all question inserts in parallel
+          await t.batch(questionInserts);
+          return attemptId;
+        });
+        
+        console.log(`Successfully created quiz attempt ${attemptId} with ${questions.length} questions`);
+        
+        // Prepare response
+        console.log('Sending response with questions...');
+        const responseData = {
+          success: true,
+          attemptId,
+          questions: questions.map(q => ({
+            id: q.id,
+            question: q.question,
+            options: q.options,
+            category: q.category,
+            difficulty: q.difficulty,
+            timeLimit: q.time_limit || 30
+          })),
+          totalQuestions: questions.length,
+          minimumScore: qualificationRound.minimum_score_percentage,
+          isExistingAttempt: false
+        };
+        
+        console.log('Response data:', JSON.stringify(responseData, null, 2));
+        res.json(responseData);
+        console.log('Response sent successfully');
+        
+      } catch (error) {
+        console.error('Error creating new quiz attempt:', error);
+        throw new Error(`Failed to create quiz attempt: ${error.message}`);
       }
 
-      // Prepare response
-      console.log('Sending response with questions...');
-      const responseData = {
-        success: true,
-        attemptId,
-        questions: questions.map(q => ({
-          id: q.id,
-          question: q.question,
-          options: q.options,
-          category: q.category,
-          difficulty: q.difficulty,
-          timeLimit: q.time_limit || 30
-        })),
-        totalQuestions: questions.length,
-        minimumScorePercentage: qualificationRound.minimum_score_percentage
-      };
-      console.log('Response data:', JSON.stringify(responseData, null, 2));
-      res.json(responseData);
-      console.log('Response sent successfully');
+  
       
     } catch (error) {
       console.error('Error in question/attempt handling:', {
