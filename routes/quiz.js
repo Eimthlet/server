@@ -120,18 +120,25 @@ router.post('/start-qualification',
       }
 
       // Create a new quiz attempt
-      console.log('Creating new quiz attempt...');
-      const newAttempt = await db.one(
-        `INSERT INTO quiz_sessions 
-         (user_id, season_id, started_at, total_questions, total_questions_in_attempt) 
-         VALUES ($1, $2, NOW(), $3, $3)
-         RETURNING id`,
-        [userId, qualificationRound.id, questions.length]
-      );
-      const attemptId = newAttempt.id;
-      console.log('Created quiz attempt with ID:', attemptId);
+      console.log(`Creating new quiz attempt with ${questions.length} questions for user ${userId} in season ${qualificationRound.id}...`);
+      let attemptId;
+      try {
+        const newAttempt = await db.one(
+          `INSERT INTO quiz_sessions 
+           (user_id, season_id, started_at, total_questions, total_questions_in_attempt) 
+           VALUES ($1, $2, NOW(), $3, $3)
+           RETURNING id`,
+          [userId, qualificationRound.id, questions.length]
+        );
+        attemptId = newAttempt.id;
+        console.log(`Created new quiz attempt with ID: ${attemptId}`);
+      } catch (dbError) {
+        console.error('Database error creating quiz attempt:', dbError);
+        throw new Error(`Database error: ${dbError.message}`);
+      }
 
       // Prepare response
+      console.log('Sending response with questions...');
       const responseData = {
         success: true,
         attemptId,
@@ -146,8 +153,7 @@ router.post('/start-qualification',
         totalQuestions: questions.length,
         minimumScorePercentage: qualificationRound.minimum_score_percentage
       };
-      
-      console.log('Sending response with', questions.length, 'questions');
+      console.log('Response data:', JSON.stringify(responseData, null, 2));
       res.json(responseData);
       console.log('Response sent successfully');
       
@@ -171,25 +177,16 @@ router.post('/start-qualification',
       }
     }
   } catch (error) {
-    console.error('Error in /quiz/start-qualification:', {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-      name: error.name,
-      user: req.user?.id,
+    console.error('Error in /quiz/start-qualification:', error);
+    const errorResponse = {
+      success: false,
+      message: 'Error starting qualification attempt',
+      error: error.message,
+      code: 'QUALIFICATION_START_ERROR',
       timestamp: new Date().toISOString()
-    });
-    
-    if (!res.headersSent) {
-      res.status(500).json({ 
-        success: false, 
-        message: 'Failed to start qualification attempt',
-        error: error.message,
-        code: error.code
-      });
-    } else {
-      console.error('Headers already sent, could not send error response');
-    }
+    };
+    console.error('Sending error response:', JSON.stringify(errorResponse, null, 2));
+    res.status(500).json(errorResponse);
   }
 });
 
