@@ -93,13 +93,14 @@ router.post('/start-qualification',
     }
 
     // Create a new quiz attempt
-    const attemptId = uuidv4();
-    await db.none(
+    const newAttempt = await db.one(
       `INSERT INTO user_quiz_attempts 
-       (id, user_id, season_id, started_at, total_questions_in_attempt) 
-       VALUES ($1, $2, $3, NOW(), $4)`,
-      [attemptId, userId, qualificationRound.id, questions.length]
+       (user_id, season_id, started_at, total_questions_in_attempt) 
+       VALUES ($1, $2, NOW(), $3)
+       RETURNING id`,
+      [userId, qualificationRound.id, questions.length]
     );
+    const attemptId = newAttempt.id;
 
     // Return the questions and attempt ID
     res.json({
