@@ -83,12 +83,37 @@ router.post('/start-qualification',
         );
       }
 
-      // Return the existing attempt
-      return res.json({ 
-        success: true, 
+      // Fetch questions for the existing attempt
+      console.log('Fetching questions for existing attempt...');
+      const questions = await db.any(
+        `SELECT q.id, q.question, q.options, q.category, q.difficulty
+         FROM questions q
+         JOIN quiz_session_questions qsq ON q.id = qsq.question_id
+         WHERE qsq.quiz_session_id = $1
+         ORDER BY qsq.question_order`,
+        [activeAttempt.id]
+      );
+
+      console.log(`Found ${questions.length} questions for attempt ${activeAttempt.id}`);
+      
+      // Return the existing attempt with questions
+      const responseData = {
+        success: true,
         attemptId: activeAttempt.id,
-        message: 'Resuming existing qualification attempt' 
-      });
+        questions: questions.map(q => ({
+          id: q.id,
+          question: q.question,
+          options: q.options,
+          category: q.category,
+          difficulty: q.difficulty
+        })),
+        totalQuestions: questions.length,
+        minimumScore: qualificationRound.minimum_score_percentage,
+        isExistingAttempt: true
+      };
+      
+      console.log('Sending existing attempt data:', JSON.stringify(responseData, null, 2));
+      return res.json(responseData);
     }
 
     try {
