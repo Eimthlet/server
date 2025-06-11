@@ -43,6 +43,7 @@ router.get('/users', isAdmin, asyncHandler(async (req, res) => {
   }
 }));
 
+
 // Route for admin to get a specific user's details including attempts and qualifications
 router.get('/user/:id', isAdmin, asyncHandler(async (req, res) => {
     const { id } = req.params;
