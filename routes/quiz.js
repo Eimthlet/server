@@ -123,8 +123,8 @@ router.post('/start-qualification',
       console.log('Creating new quiz attempt...');
       const newAttempt = await db.one(
         `INSERT INTO quiz_sessions 
-         (user_id, season_id, started_at, total_questions_in_attempt) 
-         VALUES ($1, $2, NOW(), $3)
+         (user_id, season_id, started_at, total_questions, total_questions_in_attempt) 
+         VALUES ($1, $2, NOW(), $3, $3)
          RETURNING id`,
         [userId, qualificationRound.id, questions.length]
       );
