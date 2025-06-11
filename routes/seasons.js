@@ -1,5 +1,6 @@
 import express from 'express';
 import { isAdmin } from '../middleware/auth.js';
+import { checkSeasonAccess, canAttemptQualification } from '../middleware/seasonAccess.js';
 import db from '../config/database.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
@@ -84,7 +85,10 @@ router.get('/active', asyncHandler(async (req, res) => {
 }));
 
 // Get season by ID with detailed statistics
-router.get('/:id', isAdmin, asyncHandler(async (req, res) => {
+router.get('/:id', 
+  authenticateUser, 
+  checkSeasonAccess,
+  asyncHandler(async (req, res) => {
   console.log(`Fetching season with ID ${req.params.id} at:`, new Date().toISOString());
   try {
     const { id } = req.params;

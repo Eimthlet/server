@@ -28,7 +28,10 @@ router.post('/disqualify', authenticateUser, async (req, res) => {
 });
 
 // Start a new qualification quiz attempt
-router.post('/start-qualification', authenticateUser, async (req, res) => {
+router.post('/start-qualification', 
+  authenticateUser, 
+  canAttemptQualification,
+  async (req, res) => {
   const userId = req.user.id;
   
   try {
