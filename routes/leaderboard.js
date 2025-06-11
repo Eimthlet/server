@@ -7,6 +7,8 @@ const router = express.Router();
 // Get leaderboard of top quiz performers
 router.get('/', authenticateUser, async (req, res) => {
   const { range } = req.query; // 'monthly' or 'all-time'
+  console.log(`Fetching ${range || 'all-time'} leaderboard`);
+  
   try {
     const leaderboard = await db.any(
       `SELECT 
@@ -32,35 +34,49 @@ router.get('/', authenticateUser, async (req, res) => {
       LIMIT 20`
     );
 
+    console.log(`Found ${leaderboard.length} leaderboard entries`);
+    
     // Get the current user's rank if they've completed the quiz
     let userRank = null;
     if (req.user && req.user.id) {
-      const userRankResult = await db.oneOrNone(
-        `SELECT rank
-        FROM (
-          SELECT 
-            user_id,
-            RANK() OVER (ORDER BY score DESC, completed_at ASC) as rank
-          FROM 
-            user_quiz_attempts
-          WHERE 
-            completed = true
-            ${range === 'monthly' ? "AND TO_CHAR(completed_at, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM')" : ""}
-        ) as rankings
-        WHERE user_id = $1`,
-        [req.user.id]
-      );
-
-      if (userRankResult) {
-        userRank = userRankResult.rank;
+      try {
+        const userRankResult = await db.oneOrNone(
+          `SELECT rank
+          FROM (
+            SELECT 
+              user_id,
+              RANK() OVER (ORDER BY score DESC, completed_at ASC) as rank
+            FROM 
+              user_quiz_attempts
+            WHERE 
+              completed = true
+              ${range === 'monthly' ? "AND TO_CHAR(completed_at, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM')" : ""}
+          ) as rankings
+          WHERE user_id = $1`,
+          [req.user.id]
+        );
+        userRank = userRankResult ? userRankResult.rank : null;
+      } catch (rankError) {
+        console.error('Error fetching user rank:', rankError);
       }
     }
 
-    res.json({
+    // Log the response data for debugging
+    const responseData = {
+      success: true,
       leaderboard,
       userRank,
-      currentUserId: req.user.id
+      totalUsers: leaderboard.length,
+      range: range || 'all-time'
+    };
+    
+    console.log('Sending leaderboard response:', {
+      totalUsers: responseData.totalUsers,
+      hasUserRank: userRank !== null,
+      range: responseData.range
     });
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: 'Could not fetch leaderboard' });
