@@ -59,17 +59,30 @@ router.post('/start-qualification',
     }
 
     // Check if user already has an active attempt
+    console.log('Checking for existing active attempts...');
     const activeAttempt = await db.oneOrNone(
-      `SELECT id FROM user_quiz_attempts 
+      `SELECT id FROM quiz_sessions 
        WHERE user_id = $1 
-       AND season_id = $2 
+       AND (season_id = $2 OR season_id IS NULL)
        AND completed = false 
        ORDER BY started_at DESC 
        LIMIT 1`,
       [userId, qualificationRound.id]
     );
-
+      
     if (activeAttempt) {
+      console.log('Found existing active attempt:', activeAttempt.id);
+      // Update the season_id if it was NULL
+      if (activeAttempt.season_id === null) {
+        console.log('Updating season_id for existing attempt');
+        await db.none(
+          `UPDATE quiz_sessions 
+           SET season_id = $1 
+           WHERE id = $2`,
+          [qualificationRound.id, activeAttempt.id]
+        );
+      }
+
       // Return the existing attempt
       return res.json({ 
         success: true, 
@@ -109,7 +122,7 @@ router.post('/start-qualification',
       // Create a new quiz attempt
       console.log('Creating new quiz attempt...');
       const newAttempt = await db.one(
-        `INSERT INTO user_quiz_attempts 
+        `INSERT INTO quiz_sessions 
          (user_id, season_id, started_at, total_questions_in_attempt) 
          VALUES ($1, $2, NOW(), $3)
          RETURNING id`,
