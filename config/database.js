@@ -47,7 +47,7 @@ const pgp = pgPromise(initOptions);
 
 // Use connection string for database configuration
 const dbConfig = {
-  connectionString: 'postgresql://postgres_tqud_user:nVBVefqkPY2640tlnd7ULqpQ30LzyMhB@dpg-d0lhrbpr0fns738ddi80-a.oregon-postgres.render.com/postgres_tqud',
+  connectionString: 'postgresql://neondb_owner:npg_BGpula8A1bOI@ep-silent-violet-a85kj2fj-pooler.eastus2.azure.neon.tech/neondb?sslmode=require&channel_binding=require',
   ssl: { 
     rejectUnauthorized: false
   },
