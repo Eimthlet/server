@@ -45,12 +45,16 @@ const initOptions = {
 
 const pgp = pgPromise(initOptions);
 
-// Use connection string for database configuration
+// Use environment variables for database configuration
 const dbConfig = {
-  connectionString: 'postgresql://neondb_owner:npg_BGpula8A1bOI@ep-silent-violet-a85kj2fj-pooler.eastus2.azure.neon.tech/neondb?sslmode=require&channel_binding=require',
-  ssl: { 
-    rejectUnauthorized: false
-  },
+  host: process.env.DATABASE_HOST,
+  port: process.env.DATABASE_PORT,
+  database: process.env.DATABASE_NAME,
+  user: process.env.DATABASE_USER,
+  password: process.env.DATABASE_PASSWORD,
+  ssl: process.env.DATABASE_SSL === 'true' ? { 
+    rejectUnauthorized: false 
+  } : false,
   // Connection timeout of 10 seconds
   connectionTimeoutMillis: 10000,
   // Maximum number of clients in the pool
